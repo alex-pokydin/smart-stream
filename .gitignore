@@ -1,0 +1,14 @@
+syntax: glob
+
+node_modules
+ssd
+cache
+config_local*
+nbproject
+.orig
+*.orig
+*.log
+package-lock.json
+logs/
+html/hls/
+html/images/
