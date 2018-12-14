@@ -4,21 +4,32 @@ const {
 } = require('child_process');
 var progressStream = require('ffmpeg-progress-stream');
 var Cam = require('onvif').Cam;
-var config = require('./config.json');
 var Camera = require('../models/camera');
 
 var ffmpeg = {
 
+    prev_time: false,
     ffmpeg_youtube: false,
+    config: {},
     data: {},
+    isRun: function(){
+        var isRun = this.prev_time && (Math.floor(new Date() - this.prev_time) < 10000);
+        return isRun;
+    },
+    cfg: function(param){
+        if(!this.config){
+            return false;
+        }
+        return this.config[param];
+    }
 
 };
 
 ffmpeg.params_youtube = function(){
-    debug( ffmpeg.data.stream_id);
-
+    
     return [
         '-y',
+
         // '-f', 'alsa',
         // '-ar', '8000',
         // '-ac', '1',
@@ -30,65 +41,71 @@ ffmpeg.params_youtube = function(){
         '-i', 'anullsrc',
 
         '-rtsp_transport', 'tcp',
-        '-i', 'rtsp://192.168.3.10:554/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
+        '-i', 'rtsp://' + ffmpeg.cfg('ip') + '/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
         '-c:v', 'copy',
         '-c:a', 'aac',
         '-strict', 'experimental',
         '-f', 'flv',
-        'rtmp://a.rtmp.youtube.com/live2/' + ffmpeg.data.stream_id
+        'rtmp://a.rtmp.youtube.com/live2/' + ffmpeg.cfg('stream_id')
     ];
 } 
 
-ffmpeg.ffmpeg_stop = function () {
-    debug('Stopped!');
+ffmpeg.stop = function () {
+    debug('Stopping!');
     try {
-        ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.ffmpeg_stop);
+        ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.stop);
         ffmpeg.ffmpeg_youtube.kill('SIGKILL');
     } catch (error) {
         debug('Cant kill!');
     }
     
+    ffmpeg.prev_time = false;
+
     clearInterval(ffmpeg.interval);
 
     Camera.findOne({}, (err , data) => {
-        ffmpeg.data = data;
+        ffmpeg.config = data;
     });
 
     setTimeout(function () {
-        if(ffmpeg.data.autostart){
+        if(ffmpeg.cfg('autostart') && !ffmpeg.isRun()){
             ffmpeg.start();
         }else{
-            ffmpeg.ffmpeg_stop();
+            ffmpeg.stop();
         }
-    }, 5000);
+    }, 1000);
 };
 
 ffmpeg.start = function () {
-
-    if(!ffmpeg.data.autostart){
-        ffmpeg.ffmpeg_stop();
+    
+    if(ffmpeg.isRun() ){
+        return;
     }
-
+    
     var prev_frame = 0;
-    var prev_time = new Date();
 
     debug('Starting...');
     debug(ffmpeg.params_youtube().join(' '));
-
-    ffmpeg.ffmpeg_youtube = spawn('ffmpeg', ffmpeg.params_youtube());
-
+    
+    clearInterval(ffmpeg.interval);
+    
     ffmpeg.interval = setInterval(() => {
         
-        Camera.findOne({}, (err , data) => {
-            ffmpeg.data = data;
-        });
-
-        if ( (Math.floor(new Date() - prev_time) > 10000)
-            || (!ffmpeg.data.autostart) ) {
-            ffmpeg.ffmpeg_youtube.kill('SIGKILL');
+        if(ffmpeg.cfg('autostart') && !ffmpeg.isRun()){
+            ffmpeg.start();
         }
+        
+        Camera.findOne({}, (err , data) => {
+            ffmpeg.config = data;
+            
+            if ( !ffmpeg.cfg('autostart') && ffmpeg.isRun() ) {
+                ffmpeg.ffmpeg_youtube.kill('SIGKILL');
+            }
+        });
+        
     }, 5000);
-
+    
+    ffmpeg.ffmpeg_youtube = spawn('ffmpeg', ffmpeg.params_youtube());
     ffmpeg.ffmpeg_youtube.stderr
         .pipe(progressStream())
         .on('data', function (data) {
@@ -115,26 +132,26 @@ ffmpeg.start = function () {
             prev_frame = data.frame;
             data.test = test_data;
             console.log(JSON.stringify([data]));
+            ffmpeg.data = data;
 
             if (test > 0) {
-                if (ffmpeg.ffmpeg_youtube) {
+                if (ffmpeg.isRun()) {
                     ffmpeg.ffmpeg_youtube.kill('SIGKILL');
                 } else {
                     debug('Nothing to kill!');
-                    ffmpeg.ffmpeg_stop();
+                    ffmpeg.stop();
                 }
 
             }
 
-            prev_time = new Date();
+            ffmpeg.prev_time = new Date();
         });
     
-    ffmpeg.ffmpeg_youtube.stderr.on('close', ffmpeg.ffmpeg_stop);
+    ffmpeg.ffmpeg_youtube.stderr.on('close', ffmpeg.stop);
 };
 
 Camera.findOne({}, (err , data) => {
-    ffmpeg.data = data;
-    ffmpeg.start();
+    ffmpeg.config = data;
 });
 
 module.exports = ffmpeg;

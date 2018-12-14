@@ -8,12 +8,17 @@ var bodyParser = require('body-parser');
 var debug = require('debug')('proj:server');
 var http = require('http');
 var mongoose   = require('mongoose');
+var ffmpeg = require('./lib/ffmpeg');
+var defaults = require('./lib/defaults');
+var Camera = require('./models/camera');
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 
 var app        = express();                 // define our app using express
 
+app.ffmpeg = ffmpeg;
+app.ffmpeg.start();
 
 const connectDb = () => {
 
@@ -72,6 +77,7 @@ app.set('port', port);
  */
 var server = http.createServer(app);
 const startServer = () => {
+    defaults.init(); 
     server.listen(port);
     console.log(`App started on port ${port}`)
 }

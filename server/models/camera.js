@@ -5,6 +5,7 @@ var Schema       = mongoose.Schema;
 
 var CameraSchema   = new Schema({
     name: String,
+    ip: String,
     stream_id: String,
     autostart: Boolean
 });
