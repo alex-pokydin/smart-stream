@@ -7,6 +7,7 @@ var CameraSchema   = new Schema({
     name: String,
     ip: String,
     stream_id: String,
+    audio: Boolean,
     autostart: Boolean
 });
 

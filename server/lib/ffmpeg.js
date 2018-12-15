@@ -26,20 +26,28 @@ var ffmpeg = {
 };
 
 ffmpeg.params_youtube = function(){
-    
-    return [
+
+    var conf = [
         '-y',
+    ];
 
-        // '-f', 'alsa',
-        // '-ar', '8000',
-        // '-ac', '1',
-        // '-rtbufsize', '1024',
-        // '-thread_queue_size', '1000',
-        // '-i', 'hw:0',
-
-        '-f', 'lavfi',
-        '-i', 'anullsrc',
-
+    if( ffmpeg.cfg('audio') ){
+        conf.concat([
+            '-f', 'alsa',
+            '-ar', '8000',
+            '-ac', '1',
+            '-rtbufsize', '1024',
+            '-thread_queue_size', '1000',
+            '-i', 'hw:0'
+        ]);
+    }else{
+        conf.concat([
+            '-f', 'lavfi',
+            '-i', 'anullsrc',
+        ]);
+    }
+        
+    conf.concat([
         '-rtsp_transport', 'tcp',
         '-i', 'rtsp://' + ffmpeg.cfg('ip') + '/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
         '-c:v', 'copy',
@@ -47,7 +55,9 @@ ffmpeg.params_youtube = function(){
         '-strict', 'experimental',
         '-f', 'flv',
         'rtmp://a.rtmp.youtube.com/live2/' + ffmpeg.cfg('stream_id')
-    ];
+    ]);
+    
+    return conf;
 } 
 
 ffmpeg.stop = function () {
