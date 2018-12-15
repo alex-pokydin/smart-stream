@@ -4,7 +4,6 @@ const {
     spawn
 } = require('child_process');
 var progressStream = require('ffmpeg-progress-stream');
-var Cam = require('onvif').Cam;
 var Camera = require('../models/camera');
 
 var ffmpeg = {
@@ -46,7 +45,7 @@ var ffmpeg = {
             fps: ffmpeg.data[0].fps,
             size: ffmpeg.data[0].size,
             time: ffmpeg.data[0].time,
-            bit: ffmpeg.data[0].bit,
+            bit: ffmpeg.data[0].bitrate,
             speed: ffmpeg.data[0].speed,
             cpu: os.loadavg(),
             mem: Math.floor(os.totalmem()/1024/1024),
@@ -82,7 +81,7 @@ ffmpeg.params_youtube = function(){
         '-thread_queue_size', '4000',
         '-rtsp_transport', 'tcp',
         '-use_wallclock_as_timestamps', '1',
-        '-i', 'rtsp://' + ffmpeg.cfg('ip') + '/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
+        '-i', 'rtsp://' + ffmpeg.cfg('ip') + ':554/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
         '-c:v', 'copy',
         '-c:a', 'aac',
         '-strict', 'experimental',

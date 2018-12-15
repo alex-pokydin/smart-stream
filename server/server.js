@@ -11,9 +11,11 @@ var mongoose   = require('mongoose');
 var ffmpeg = require('./lib/ffmpeg');
 var defaults = require('./lib/defaults');
 var Camera = require('./models/camera');
+var CamModel = require('./models/cam');
+var Cam = require('onvif').Cam;
 
 var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
+var onvifRouter = require('./routes/onvif');
 
 var app        = express();                 // define our app using express
 
@@ -47,7 +49,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 
 app.use('/api', indexRouter);
-app.use('/users', usersRouter);
+app.use('/onvif', onvifRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
@@ -79,7 +81,18 @@ var server = http.createServer(app);
 const startServer = () => {
     defaults.init(); 
     server.listen(port);
-    console.log(`App started on port ${port}`)
+    console.log(`App started on port ${port}`);
+    Camera.findOne({},(err, c) => {
+      var conf = {
+        hostname: c.ip,
+        username: c.user || 'admin',
+        password: c.pass || '',
+        port: c.port || '8899'
+      };
+      new Cam(conf,function(err) {
+        app.cam = this;
+      });
+    });
 }
 connectDb()
     .on('error', debug)

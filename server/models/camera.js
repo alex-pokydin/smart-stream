@@ -8,7 +8,9 @@ var CameraSchema   = new Schema({
     ip: String,
     stream_id: String,
     audio: Boolean,
-    autostart: Boolean
+    autostart: Boolean,
+    user: String,
+    pass: String
 });
 
 module.exports = mongoose.model('Camera', CameraSchema);
