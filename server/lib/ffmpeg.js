@@ -1,4 +1,5 @@
-var debug = require('debug')('proj:server');
+var debug = require('debug')('smart-stream:ffmpeg');
+var os = require('os');
 const {
     spawn
 } = require('child_process');
@@ -15,7 +16,7 @@ var ffmpeg = {
     isRun: function(){
         var isRun = this.prev_time 
             && (this.ffmpeg_youtube !== false)
-            && (Math.floor(new Date() - this.prev_time) < 10000);
+            && (Math.floor(new Date() - this.prev_time) < 2000);
         return isRun;
     },
     cfg: function(param){
@@ -23,6 +24,34 @@ var ffmpeg = {
             return false;
         }
         return this.config[param];
+    },
+    check_db: function(start, stop){
+        start = start || function(){};
+        stop = stop || function(){};
+        Camera.findOne({}, (err , data) => {
+            ffmpeg.config = data;
+            
+            if( ffmpeg.cfg('autostart') ){
+                ffmpeg.start();
+                start();
+            } else {
+                ffmpeg.stop('Need to stop by check_db!');
+                stop();
+            }
+        });
+        debug('%j',ffmpeg.stats());
+    },
+    stats: function(){
+        return ffmpeg.data && ffmpeg.data[0] ? {
+            fps: ffmpeg.data[0].fps,
+            size: ffmpeg.data[0].size,
+            time: ffmpeg.data[0].time,
+            bit: ffmpeg.data[0].bit,
+            speed: ffmpeg.data[0].speed,
+            cpu: os.loadavg(),
+            mem: Math.floor(os.totalmem()/1024/1024),
+            free: Math.floor(os.freemem()/1024/1024)
+        } : {};
     }
 
 };
@@ -64,70 +93,51 @@ ffmpeg.params_youtube = function(){
     return conf;
 } 
 
-ffmpeg.stop = function () {
-    debug('Stopping!');
-    try {
-        ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.onClose);
-        ffmpeg.ffmpeg_youtube.kill('SIGKILL');
-    } catch (error) {
-        debug('Cant kill!');
-    }
-    
-    ffmpeg.prev_time = false;
+ffmpeg.stop = function (reason) {
+    debug('Stopping! ' + reason);
+    ffmpeg.kill_stream();
 
+    // clear start interval
     clearInterval(ffmpeg.interval);
 
-    Camera.findOne({}, (err , data) => {
-        ffmpeg.config = data;
-    });
-
-    setTimeout(function () {
-        if(ffmpeg.cfg('autostart') && !ffmpeg.isRun()){
-            ffmpeg.start();
-        }else{
-            ffmpeg.stop();
-        }
-    }, 1000);
+    // chcek db and start or stop
+    setTimeout(ffmpeg.check_db, 5000);
 };
 
 ffmpeg.start = function () {
     
-    if(ffmpeg.isRun() ){
+    if( ffmpeg.isRun() ){
         return;
+    }else{
+        ffmpeg.kill_stream();
     }
     
     debug('Starting...');
         
     clearInterval(ffmpeg.interval);
     
-    ffmpeg.interval = setInterval(() => {
-        
-        if(ffmpeg.cfg('autostart') && !ffmpeg.isRun()){
-            ffmpeg.start();
-        }
-        
-        Camera.findOne({}, (err , data) => {
-            ffmpeg.config = data;
-            
-            if ( !ffmpeg.cfg('autostart') && ffmpeg.isRun() ) {
-                ffmpeg.ffmpeg_youtube.kill('SIGKILL');
-            }
-        });
-        
-    }, 5000);
-
-    Camera.findOne({}, (err , data) => {
-        ffmpeg.config = data;
-        
-        if ( !ffmpeg.cfg('autostart') && ffmpeg.isRun() ) {
-            ffmpeg.ffmpeg_youtube.kill('SIGKILL');
-            return;
-        }
-
-        ffmpeg.stream();
-    });
+    ffmpeg.interval = setInterval(ffmpeg.check_db, 5000);
     
+    ffmpeg.check_db(function(){
+        if(!ffmpeg.isRun() ){
+            debug('Start stream!');
+            ffmpeg.stream(); 
+        }
+    });
+
 };
+
+ffmpeg.kill_stream = function(){
+    debug('Killing stream');
+    try {
+        ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.onClose);
+        ffmpeg.ffmpeg_youtube.kill('SIGKILL');
+    } catch (error) {
+        debug('Cant kill!');
+    }
+    // used by isRun
+    ffmpeg.prev_time = false;
+}
 
 
 ffmpeg.stream = function(){
@@ -175,11 +185,12 @@ ffmpeg.stream = function(){
             ffmpeg.data = ffmpeg.data.slice(0,5);
 
             if (test > 0) {
+                debug(ffmpeg.data);
                 if (ffmpeg.isRun()) {
                     ffmpeg.ffmpeg_youtube.kill('SIGKILL');
                 } else {
                     debug('Nothing to kill!');
-                    ffmpeg.stop();
+                    ffmpeg.stop(`FFMPEG check failed: ${JSON.stringify([data])}`);
                 }
 
             }
@@ -192,11 +203,8 @@ ffmpeg.stream = function(){
 
 ffmpeg.onClose = function(code, signal){
     debug(`child process terminated - code: ${code}, signal: ${signal}`);
-    ffmpeg.stop();
+    ffmpeg.stop('FFMPEG onClose event!');
 }
 
-Camera.findOne({}, (err , data) => {
-    ffmpeg.config = data;
-});
 
 module.exports = ffmpeg;

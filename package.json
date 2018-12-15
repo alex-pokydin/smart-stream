@@ -1,12 +1,12 @@
 {
-  "name": "proj",
+  "name": "smart-stream",
   "version": "0.0.0",
   "private": true,
   "scripts": {
     "stop": "forever stopall",
     "start": "forever start forever/development.json",
-    "start-dev": "cross-env DEBUG=* forever start forever/development.json",
-    "dev": "cross-env DEBUG=* nodemon server/server.js"
+    "start-dev": "cross-env DEBUG=smart-stream:* forever start forever/development.json",
+    "dev": "cross-env DEBUG=smart-stream:* nodemon server/server.js"
   },
   "dependencies": {
     "body-parser": "^1.18.3",
