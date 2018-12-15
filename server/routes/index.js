@@ -14,11 +14,20 @@ router.get('/', function(req, res, next) {
 /* GET home page. */
 router.get('/start', function(req, res, next) {
   res.app.ffmpeg.start();
-  res.status(200).json({});
+  res.status(200).json('starting');
+});
+
+/* GET home page. */
+router.get('/stop', function(req, res, next) {
+  res.app.ffmpeg.stop();
+  res.status(200).json('stoping');
 });
 
 router.get('/data', function(req, res, next) {
-  res.status(200).json( res.app.ffmpeg.data );
+  res.status(200).json( {
+    'total': res.app.ffmpeg.data.length,
+    'data': res.app.ffmpeg.data 
+  });
 });
 
 

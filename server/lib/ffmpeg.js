@@ -11,9 +11,11 @@ var ffmpeg = {
     prev_time: false,
     ffmpeg_youtube: false,
     config: {},
-    data: {},
+    data: [],
     isRun: function(){
-        var isRun = this.prev_time && (Math.floor(new Date() - this.prev_time) < 10000);
+        var isRun = this.prev_time 
+            && (this.ffmpeg_youtube !== false)
+            && (Math.floor(new Date() - this.prev_time) < 10000);
         return isRun;
     },
     cfg: function(param){
@@ -65,6 +67,7 @@ ffmpeg.stop = function () {
     try {
         ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.stop);
         ffmpeg.ffmpeg_youtube.kill('SIGKILL');
+        ffmpeg.ffmpeg_youtube = false;
     } catch (error) {
         debug('Cant kill!');
     }
@@ -127,7 +130,10 @@ ffmpeg.start = function () {
 
 
 ffmpeg.stream = function(){
+
+    ffmpeg.prev_time = new Date();
     var prev_frame = 0;
+    var prev_time = 0;
 
     debug(ffmpeg.params_youtube().join(' '));
     ffmpeg.ffmpeg_youtube = spawn('ffmpeg', ffmpeg.params_youtube());
@@ -153,11 +159,19 @@ ffmpeg.stream = function(){
                 test_data.frame = false;
                 test += 1;
             }
+            if ((prev_time != '') && (data.time == prev_time)) {
+                test_data.time = false;
+                test += 1;
+            }
             test_data.frame = prev_frame;
+            test_data.time = prev_time;
             prev_frame = data.frame;
+            prev_time = data.time;
             data.test = test_data;
+            data.ts = new Date();
             //console.log(JSON.stringify([data]));
-            ffmpeg.data = data;
+            ffmpeg.data.unshift( data );
+            ffmpeg.data = ffmpeg.data.slice(0,5);
 
             if (test > 0) {
                 if (ffmpeg.isRun()) {
