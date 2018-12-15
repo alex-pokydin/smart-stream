@@ -32,7 +32,7 @@ ffmpeg.params_youtube = function(){
     ];
 
     if( ffmpeg.cfg('audio') ){
-        conf.concat([
+        conf = conf.concat([
             '-f', 'alsa',
             '-ar', '8000',
             '-ac', '1',
@@ -41,13 +41,13 @@ ffmpeg.params_youtube = function(){
             '-i', 'hw:0'
         ]);
     }else{
-        conf.concat([
+        conf = conf.concat([
             '-f', 'lavfi',
             '-i', 'anullsrc',
         ]);
     }
         
-    conf.concat([
+    conf = conf.concat([
         '-rtsp_transport', 'tcp',
         '-i', 'rtsp://' + ffmpeg.cfg('ip') + '/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
         '-c:v', 'copy',
