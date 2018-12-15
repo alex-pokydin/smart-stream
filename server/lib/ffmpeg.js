@@ -56,7 +56,7 @@ ffmpeg.params_youtube = function(){
         '-f', 'flv',
         'rtmp://a.rtmp.youtube.com/live2/' + ffmpeg.cfg('stream_id')
     ]);
-    
+
     return conf;
 } 
 
@@ -92,11 +92,8 @@ ffmpeg.start = function () {
         return;
     }
     
-    var prev_frame = 0;
-
     debug('Starting...');
-    debug(ffmpeg.params_youtube().join(' '));
-    
+        
     clearInterval(ffmpeg.interval);
     
     ffmpeg.interval = setInterval(() => {
@@ -114,7 +111,25 @@ ffmpeg.start = function () {
         });
         
     }, 5000);
+
+    Camera.findOne({}, (err , data) => {
+        ffmpeg.config = data;
+        
+        if ( !ffmpeg.cfg('autostart') && ffmpeg.isRun() ) {
+            ffmpeg.ffmpeg_youtube.kill('SIGKILL');
+            return;
+        }
+
+        ffmpeg.stream();
+    });
     
+};
+
+
+ffmpeg.stream = function(){
+    var prev_frame = 0;
+
+    debug(ffmpeg.params_youtube().join(' '));
     ffmpeg.ffmpeg_youtube = spawn('ffmpeg', ffmpeg.params_youtube());
     ffmpeg.ffmpeg_youtube.stderr
         .pipe(progressStream())
@@ -141,7 +156,7 @@ ffmpeg.start = function () {
             test_data.frame = prev_frame;
             prev_frame = data.frame;
             data.test = test_data;
-            console.log(JSON.stringify([data]));
+            //console.log(JSON.stringify([data]));
             ffmpeg.data = data;
 
             if (test > 0) {
@@ -158,7 +173,7 @@ ffmpeg.start = function () {
         });
     
     ffmpeg.ffmpeg_youtube.stderr.on('close', ffmpeg.stop);
-};
+}
 
 Camera.findOne({}, (err , data) => {
     ffmpeg.config = data;
