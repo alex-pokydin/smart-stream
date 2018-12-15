@@ -67,7 +67,6 @@ ffmpeg.stop = function () {
     try {
         ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.stop);
         ffmpeg.ffmpeg_youtube.kill('SIGKILL');
-        ffmpeg.ffmpeg_youtube = false;
     } catch (error) {
         debug('Cant kill!');
     }

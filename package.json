@@ -5,6 +5,7 @@
   "scripts": {
     "stop": "forever stopall",
     "start": "forever start forever/development.json",
+    "start-dev": "cross-env DEBUG=* forever start forever/development.json",
     "dev": "cross-env DEBUG=* nodemon server/server.js"
   },
   "dependencies": {
