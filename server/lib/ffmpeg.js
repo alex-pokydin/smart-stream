@@ -35,11 +35,11 @@ ffmpeg.params_youtube = function(){
 
     if( ffmpeg.cfg('audio') ){
         conf = conf.concat([
+            '-thread_queue_size', '4000',
             '-f', 'alsa',
-            '-ar', '8000',
+            '-ar', '44100',
             '-ac', '1',
-            '-rtbufsize', '1024',
-            '-thread_queue_size', '1000',
+            '-use_wallclock_as_timestamps', '1',
             '-i', 'hw:0'
         ]);
     }else{
@@ -50,7 +50,9 @@ ffmpeg.params_youtube = function(){
     }
         
     conf = conf.concat([
+        '-thread_queue_size', '4000',
         '-rtsp_transport', 'tcp',
+        '-use_wallclock_as_timestamps', '1',
         '-i', 'rtsp://' + ffmpeg.cfg('ip') + '/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
         '-c:v', 'copy',
         '-c:a', 'aac',
@@ -65,7 +67,7 @@ ffmpeg.params_youtube = function(){
 ffmpeg.stop = function () {
     debug('Stopping!');
     try {
-        ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.stop);
+        ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.onClose);
         ffmpeg.ffmpeg_youtube.kill('SIGKILL');
     } catch (error) {
         debug('Cant kill!');
@@ -185,7 +187,12 @@ ffmpeg.stream = function(){
             ffmpeg.prev_time = new Date();
         });
     
-    ffmpeg.ffmpeg_youtube.stderr.on('close', ffmpeg.stop);
+    ffmpeg.ffmpeg_youtube.stderr.on('close', ffmpeg.onClose);
+}
+
+ffmpeg.onClose = function(code, signal){
+    debug(`child process terminated - code: ${code}, signal: ${signal}`);
+    ffmpeg.stop();
 }
 
 Camera.findOne({}, (err , data) => {
