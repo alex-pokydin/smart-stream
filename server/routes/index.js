@@ -37,6 +37,10 @@ router.post('/', (req, res, next) => {
       data.autostart = req.body.autostart;
       restart = true;
     }
+    if(req.body.audio) {
+      data.audio = req.body.audio;
+      restart = true;
+    }
     data.save(debug);
     res.status(200).json({data});
     if(restart){
