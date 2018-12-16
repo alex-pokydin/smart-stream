@@ -1,9 +1,15 @@
-# Start dev
+1. [Start dev](#start-dev)
+1. [Installation](#installation)
+
+
+# Start dev 
 ```
 npm run dev
 ```
 
-# install global
+# Installation
+
+## install  globals
 
 ```
 sudo npm i -g nodemon
@@ -12,7 +18,7 @@ sudo npm i -g forever-service
 
 ```
 
-# Install mongoDB on orange pi
+## Install mongoDB on orange pi
 https://github.com/robertsLando/MongoDB-OrangePI
 
 Create mongodb user and folders needed
@@ -56,7 +62,7 @@ sudo systemctl enable mongodb
 
 
 
-# install ffmpeg on WIN
+## install ffmpeg on WIN
 download and uzip ffmpeg from official site
 https://github.com/adaptlearning/adapt_authoring/wiki/Installing-FFmpeg
 ```
