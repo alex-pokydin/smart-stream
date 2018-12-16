@@ -6,7 +6,7 @@
     "stop": "forever stopall",
     "start": "forever start forever/development.json",
     "start-dev": "cross-env DEBUG=smart-stream:* forever start forever/development.json",
-    "dev": "cross-env DEBUG=smart-stream:* nodemon server/server.js"
+    "dev": "cross-env * nodemon server/server.js"
   },
   "dependencies": {
     "body-parser": "^1.18.3",

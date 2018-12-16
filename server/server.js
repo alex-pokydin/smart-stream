@@ -91,6 +91,14 @@ const startServer = () => {
       };
       new Cam(conf,function(err) {
         app.cam = this;
+        this.setSystemDateAndTime({
+          'dateTimeType': 'Manual',
+          'daylightSavings': 'true',
+          'timezone': 'EET-2EEST-3,M3.5.0/3,M10.5.0/4',
+          'dateTime': new Date()
+        }, function(err, date){
+          debug(date);
+        });
       });
     });
 }
