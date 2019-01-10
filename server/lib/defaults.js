@@ -1,17 +1,24 @@
 var debug = require('debug')('proj:server');
-var Camera = require('../models/camera');
 
 module.exports = {
 
-    init: function(){
-        Camera.findOne({}, (err, data) => {
-            if (!data) {
-                const m = new Camera;
-                m.ip = '192.168.3.10:554';
-                m.autostart = true;
-                m.save(debug);
-            }
-        });
+    init: async function(app){
+        if (!(await app.storage.getItem('ip'))) {
+            await app.storage.setItem('ip', '192.168.3.10');
+        }
+        if (!(await app.storage.getItem('user'))) {
+            await app.storage.setItem('user', 'admin');
+        }
+        if (!(await app.storage.getItem('pass'))) {
+            await app.storage.setItem('pass', '');
+        }
+        if (!(await app.storage.getItem('port'))) {
+            await app.storage.setItem('port', '8899');
+        }
+        if (!(await app.storage.getItem('autostart'))) {
+            await app.storage.setItem('autostart', false);
+        }
+        
     }
     
 };

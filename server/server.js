@@ -7,12 +7,10 @@ var logger = require('morgan');
 var bodyParser = require('body-parser');
 var debug = require('debug')('smart-stream:server');
 var http = require('http');
-var mongoose   = require('mongoose');
 var ffmpeg = require('./lib/ffmpeg');
 var defaults = require('./lib/defaults');
-var Camera = require('./models/camera');
-var CamModel = require('./models/cam');
 var Cam = require('onvif').Cam;
+var storage = require('node-persist');
 
 var indexRouter = require('./routes/index');
 var onvifRouter = require('./routes/onvif');
@@ -21,15 +19,7 @@ var app        = express();                 // define our app using express
 
 app.ffmpeg = ffmpeg;
 app.ffmpeg.start();
-
-const connectDb = () => {
-
-    const options = {
-        useNewUrlParser: true
-    }
-    mongoose.connect('mongodb://localhost/SmartStream', options)
-    return mongoose.connection
-}
+app.storage = storage;
 
 
 // configure app to use bodyParser()
@@ -78,35 +68,41 @@ app.set('port', port);
  * Create HTTP server.
  */
 var server = http.createServer(app);
-const startServer = () => {
-    defaults.init(); 
-    server.listen(port);
-    console.log(`App started on port ${port}`);
-    Camera.findOne({},(err, c) => {
-      var conf = {
-        hostname: c.ip,
-        username: c.user || 'admin',
-        password: c.pass || '',
-        port: c.port || '8899'
-      };
-      new Cam(conf,function(err) {
-        app.cam = this;
-        this.setSystemDateAndTime({
-          'dateTimeType': 'Manual',
-          'daylightSavings': 'true',
-          'timezone': 'EET-2EEST-3,M3.5.0/3,M10.5.0/4',
-          'dateTime': new Date()
-        }, function(err, date){
-          debug(date);
-        });
-      });
-    });
-}
-connectDb()
-    .on('error', debug)
-    .on('disconnected', connectDb)
-    .once('open', startServer);
 
+var start = async function () {
+
+  await storage.init();
+
+  defaults.init(app);
+  server.listen(port);
+  console.log(`App started on port ${port}`);
+
+  var conf = {
+    hostname: await storage.getItem('ip') || 'localhost',
+    username: await storage.getItem('user') || 'admin',
+    password: await storage.getItem('pass') || '',
+    port: await storage.getItem('port') || '8899'
+  };
+
+  debug(conf);
+
+  new Cam(conf, function (err) {
+    app.cam = this;
+    if(!!err) return;
+
+    this.setSystemDateAndTime({
+        'dateTimeType': 'Manual',
+        'daylightSavings': 'true',
+        'timezone': 'EET-2EEST-3,M3.5.0/3,M10.5.0/4',
+        'dateTime': new Date()
+      }, function (err, date) {
+        debug(date);
+    });
+  });
+
+}
+
+start();
 
 /**
  * Listen on provided port, on all network interfaces.

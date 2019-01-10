@@ -1,5 +1,4 @@
 var express = require('express');
-var Camera = require('../models/camera');
 var router = express.Router();
 var debug = require('debug')('smart-stream:index');
 

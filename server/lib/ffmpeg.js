@@ -1,10 +1,12 @@
 var debug = require('debug')('smart-stream:ffmpeg');
+var storage = require('node-persist');
 var os = require('os');
-const {
-    spawn
-} = require('child_process');
+const { spawn } = require('child_process');
 var progressStream = require('ffmpeg-progress-stream');
-var Camera = require('../models/camera');
+const EventEmitter = require('events');
+class Ffmpeg extends EventEmitter { }
+
+storage.init();
 
 var ffmpeg = {
 
@@ -24,20 +26,18 @@ var ffmpeg = {
         }
         return this.config[param];
     },
-    check_db: function(start, stop){
+    check_db: async function(start, stop){
         start = start || function(){};
         stop = stop || function(){};
-        Camera.findOne({}, (err , data) => {
-            ffmpeg.config = data;
             
-            if( ffmpeg.cfg('autostart') ){
+            if( await storage.getItem('autostart') ){
                 ffmpeg.start();
                 start();
             } else {
                 ffmpeg.stop('Need to stop by check_db!');
                 stop();
             }
-        });
+
         debug('%j',ffmpeg.stats());
     },
     stats: function(){
