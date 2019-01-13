@@ -10,7 +10,8 @@ var http = require('http');
 var ffmpeg = require('./lib/ffmpeg');
 var defaults = require('./lib/defaults');
 var Cam = require('onvif').Cam;
-var storage = require('node-persist');
+var JsonDB = require('node-json-db');
+var db = new JsonDB("config/conf", true, true);
 
 var indexRouter = require('./routes/index');
 var onvifRouter = require('./routes/onvif');
@@ -19,7 +20,7 @@ var app        = express();                 // define our app using express
 
 app.ffmpeg = ffmpeg;
 app.ffmpeg.start();
-app.storage = storage;
+app.db = db;
 
 
 // configure app to use bodyParser()
@@ -69,40 +70,36 @@ app.set('port', port);
  */
 var server = http.createServer(app);
 
-var start = async function () {
+server.listen(port);
+console.log(`App started on port ${port}`);
 
-  await storage.init();
 
-  defaults.init(app);
-  server.listen(port);
-  console.log(`App started on port ${port}`);
+defaults.init(app); 
+var cfg = db.getData("/");
+var conf = {
+  hostname: cfg.ip || 'localhost',
+  username: cfg.user || 'admin',
+  password: cfg.pass || '',
+  port: cfg.port || '8899'
+};
 
-  var conf = {
-    hostname: await storage.getItem('ip') || 'localhost',
-    username: await storage.getItem('user') || 'admin',
-    password: await storage.getItem('pass') || '',
-    port: await storage.getItem('port') || '8899'
-  };
+debug(conf); 
 
-  debug(conf);
+new Cam(conf, function (err) {
+  app.cam = this;
+  if(!!err) return;
 
-  new Cam(conf, function (err) {
-    app.cam = this;
-    if(!!err) return;
-
-    this.setSystemDateAndTime({
-        'dateTimeType': 'Manual',
-        'daylightSavings': 'true',
-        'timezone': 'EET-2EEST-3,M3.5.0/3,M10.5.0/4',
-        'dateTime': new Date()
-      }, function (err, date) {
-        debug(date);
-    });
+  this.setSystemDateAndTime({
+      'dateTimeType': 'Manual',
+      'daylightSavings': 'true',
+      'timezone': 'EET-2EEST-3,M3.5.0/3,M10.5.0/4',
+      'dateTime': new Date()
+    }, function (err, date) {
+      debug(date);
   });
+});
 
-}
-
-start();
+  
 
 /**
  * Listen on provided port, on all network interfaces.

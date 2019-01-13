@@ -1,12 +1,10 @@
 var debug = require('debug')('smart-stream:ffmpeg');
-var storage = require('node-persist');
 var os = require('os');
 const { spawn } = require('child_process');
 var progressStream = require('ffmpeg-progress-stream');
-const EventEmitter = require('events');
-class Ffmpeg extends EventEmitter { }
+var JsonDB = require('node-json-db');
+var db = new JsonDB("config/conf", true, true);
 
-storage.init();
 
 var ffmpeg = {
 
@@ -21,36 +19,37 @@ var ffmpeg = {
         return isRun;
     },
     cfg: function(param){
-        if(!this.config){
-            return false;
-        }
-        return this.config[param];
+        return ffmpeg.config[param];
     },
-    check_db: async function(start, stop){
+    check_db: function(start, stop){
         start = start || function(){};
         stop = stop || function(){};
-            
-            if( await storage.getItem('autostart') ){
-                ffmpeg.start();
-                start();
-            } else {
-                ffmpeg.stop('Need to stop by check_db!');
-                stop();
-            }
+        db.reload();
+        ffmpeg.config = db.getData("/");
+
+        if( ffmpeg.cfg('autostart') ){
+            ffmpeg.start();
+            start();
+        } else {
+            ffmpeg.stop('Need to stop by autostart!');
+            stop();
+        }
 
         debug('%j',ffmpeg.stats());
     },
     stats: function(){
-        return ffmpeg.data && ffmpeg.data[0] ? {
-            fps: ffmpeg.data[0].fps,
-            size: ffmpeg.data[0].size,
-            time: ffmpeg.data[0].time,
-            bit: ffmpeg.data[0].bitrate,
-            speed: ffmpeg.data[0].speed,
-            cpu: os.loadavg(),
-            mem: Math.floor(os.totalmem()/1024/1024),
-            free: Math.floor(os.freemem()/1024/1024)
-        } : {};
+        return ffmpeg.data && ffmpeg.data[0] 
+            ? {
+                fps: ffmpeg.data[0].fps,
+                size: ffmpeg.data[0].size,
+                time: ffmpeg.data[0].time,
+                bit: ffmpeg.data[0].bitrate,
+                speed: ffmpeg.data[0].speed,
+                cpu: os.loadavg(),
+                mem: Math.floor(os.totalmem()/1024/1024),
+                free: Math.floor(os.freemem()/1024/1024)
+            } 
+            : {};
     }
 
 };
@@ -111,18 +110,13 @@ ffmpeg.start = function () {
         ffmpeg.kill_stream();
     }
     
-    debug('Starting...');
-        
+    if(!ffmpeg.isRun() ){
+        debug('Start stream!');
+        ffmpeg.stream(); 
+    }
+
     clearInterval(ffmpeg.interval);
-    
     ffmpeg.interval = setInterval(ffmpeg.check_db, 5000);
-    
-    ffmpeg.check_db(function(){
-        if(!ffmpeg.isRun() ){
-            debug('Start stream!');
-            ffmpeg.stream(); 
-        }
-    });
 
 };
 
@@ -205,5 +199,8 @@ ffmpeg.onClose = function(code, signal){
     ffmpeg.stop('FFMPEG onClose event!');
 }
 
+debug('Starting...');
+clearInterval(ffmpeg.interval);
+ffmpeg.interval = setInterval(ffmpeg.check_db, 5000);
 
 module.exports = ffmpeg;

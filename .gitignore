@@ -12,5 +12,4 @@ package-lock.json
 logs/
 html/hls/
 html/images/
-config-p/
-.node-persist/
+config/

@@ -6,7 +6,7 @@
     "stop": "forever stopall",
     "start": "forever start forever/development.json",
     "start-dev": "cross-env DEBUG=smart-stream:* forever start forever/development.json",
-    "dev": "cross-env DEBUG=* nodemon server/server.js"
+    "dev": "cross-env DEBUG=* nodemon --ignore './config/' server/server.js"
   },
   "dependencies": {
     "body-parser": "^1.18.3",
@@ -17,7 +17,7 @@
     "http-errors": "~1.6.2",
     "jade": "~1.11.0",
     "morgan": "~1.9.0",
-    "node-persist": "^3.0.2",
+    "node-json-db": "^0.9.2",
     "onvif": "github:pavhunter/onvif"
   },
   "devDependencies": {
