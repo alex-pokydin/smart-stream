@@ -138,7 +138,8 @@ ffmpeg.stream = function(){
     ffmpeg.prev_time = new Date();
     var prev_frame = 0;
     var prev_time = 0;
-
+    ffmpeg.data = [];
+    
     debug(ffmpeg.params_youtube().join(' '));
     ffmpeg.ffmpeg_youtube = spawn('ffmpeg', ffmpeg.params_youtube());
     ffmpeg.ffmpeg_youtube.stderr

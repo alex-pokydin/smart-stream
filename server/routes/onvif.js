@@ -1,5 +1,8 @@
 var express = require('express');
+var http = require('http');
 var router = express.Router();
+var JsonDB = require('node-json-db');
+var db = new JsonDB("config/conf", true, true);
 
 /* GET users listing. */
 router.post('/bitrate', function(req, res, next) {
@@ -49,6 +52,21 @@ router.get('/', function(req, res, next) {
   }else{
     res.status(500).json('error');
   }
+});
+
+/* GET image. */ 
+router.get('/image', function(req, res, next) {
+  http.get({
+    hostname: db.getData("/ip"),
+    port: 80,
+    path: '/webcapture.jpg?command=snap&amp;channel=1&amp;user=admin&amp;password=tlJwpbo6',
+    agent: false  // create a new agent just for this one request
+  }, (r) => {
+    res.writeHead(200, { 
+      'Content-Type': r.headers['content-type']
+    });
+    r.pipe(res);
+  }); 
 });
 
 module.exports = router;
