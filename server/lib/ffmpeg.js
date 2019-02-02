@@ -152,14 +152,14 @@ ffmpeg.stream = function(){
                 speed: true,
                 frame: true
             };
-            if (data.fps > 0 && data.fps < 5) {
-                test_data.fps = false;
-                test += 1;
-            }
-            if (parseFloat(data.speed) < 0.9 && data.fps > 0) {
-                test_data.speed = false;
-                test += 1;
-            }
+            // if (data.fps > 0 && data.fps < 5) {
+            //     test_data.fps = false;
+            //     test += 1;
+            // }
+            // if (parseFloat(data.speed) < 0.9 && data.fps > 0) {
+            //     test_data.speed = false;
+            //     test += 1;
+            // }
             if ((prev_frame != 0) && (data.frame == prev_frame)) {
                 test_data.frame = false;
                 test += 1;
