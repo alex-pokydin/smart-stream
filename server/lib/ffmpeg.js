@@ -62,7 +62,7 @@ ffmpeg.params_youtube = function(){
 
     if( ffmpeg.cfg('audio') ){
         conf = conf.concat([
-            '-thread_queue_size', '4000',
+            '-thread_queue_size', '1000',
             '-f', 'alsa',
             '-ar', '44100',
             '-ac', '1',
@@ -77,7 +77,7 @@ ffmpeg.params_youtube = function(){
     }
         
     conf = conf.concat([
-        '-thread_queue_size', '4000',
+        '-thread_queue_size', '1000',
         '-rtsp_transport', 'tcp',
         '-use_wallclock_as_timestamps', '1',
         '-i', 'rtsp://' + ffmpeg.cfg('ip') + ':554/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
