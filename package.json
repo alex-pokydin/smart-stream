@@ -6,10 +6,11 @@
     "stop": "forever stopall",
     "start": "forever start forever/development.json",
     "start-dev": "cross-env DEBUG=smart-stream:* forever start forever/development.json",
-    "dev": "cross-env DEBUG=* nodemon --ignore 'config/*' server/server.js"
+    "dev": "cross-env DEBUG=* nodemon --ignore './config/*' server/server.js"
   },
   "dependencies": {
     "body-parser": "^1.18.3",
+    "bootstrap": "^4.2.1",
     "cookie-parser": "~1.4.3",
     "debug": "~2.6.9",
     "express": "~4.16.0",
