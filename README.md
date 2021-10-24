@@ -6,3 +6,10 @@ setx /M PATH "path\to\ffmpeg\bin;%PATH%"
 ```
 do not forget to restart console and/or IDE
 
+
+## notes
+
+Background process output
+```
+tail -f /proc/<pid>/fd/1
+```
