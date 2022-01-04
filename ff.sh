@@ -54,7 +54,7 @@ ff_func() {
         -use_wallclock_as_timestamps 1 \
         -c:v copy \
         -c:a aac \
-        -f flv -t 00:09:55 "rtmp://a.rtmp.youtube.com/live2/$youtube_key"
+        -f flv -t 00:09:50 "rtmp://a.rtmp.youtube.com/live2/$youtube_key"
 
     sleep 3
 }
