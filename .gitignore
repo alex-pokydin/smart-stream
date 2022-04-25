@@ -12,3 +12,4 @@ package-lock.json
 logs/
 html/hls/
 html/images/
+streams.txt
