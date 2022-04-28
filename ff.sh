@@ -5,7 +5,7 @@
 
 #exit 0
 
-ffmpeg_min_cpu=6
+ffmpeg_min_cpu=7
 ffmpeg_max_cpu=30
 flag=0
 
@@ -84,7 +84,7 @@ do
       -c:v copy \
       -c:a aac \
       -threads 1 \
-      -f flv "rtmp://a.rtmp.youtube.com/live2/$youtube_key"
+      -f flv -t 00:59:55 "rtmp://a.rtmp.youtube.com/live2/$youtube_key"
   
   sleep 1
 done
