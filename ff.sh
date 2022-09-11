@@ -28,8 +28,8 @@ then
       set $LinefromFile
       
       # check ffmpeg instance count
-      count=$(pgrep -fc "ffmpeg.*$1.*$2")
-      if [ $count -gt 1 ]
+      count=$(pgrep -fc "$1.*$2")
+      if [ $count -gt 2 ]
       then
         killed=$(pkill -fc "$1.*$2")
         SYSLOG "Too much processes, killed: $killed"
