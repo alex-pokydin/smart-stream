@@ -1,6 +1,6 @@
-var Cam = require('onvif').Cam; 
-
-console.log('start'); 
+var
+  http = require('http'),
+  Cam = require('onvif').Cam;
 
 new Cam({
   hostname: '192.168.3.10',
@@ -8,9 +8,10 @@ new Cam({
   password: '',
   port: '8899'
 }, function(err) {
-  console.log('connected');
-  console.log(this);
-  //this.absoluteMove({x: 1, y: 1, zoom: 1});
-  
-  
+  this.getStreamUri({protocol:'RTSP'}, function(err, stream) {
+    console.log(stream);
+  });
+  this.getSnapshotUri({}, function(err, res) {
+    console.log(res);
+  });
 });

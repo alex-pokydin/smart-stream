@@ -1,6 +1,6 @@
 var debug = require('debug')('proj:server');
 
-module.exports = {
+export default {
 
     init: function(app){ 
         var conf ={};

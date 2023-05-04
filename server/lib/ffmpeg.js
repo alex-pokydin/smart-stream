@@ -71,19 +71,23 @@ ffmpeg.params_youtube = function(){
         ]);
     }else{
         conf = conf.concat([
-            '-f', 'lavfi',
-            '-i', 'anullsrc',
+            // '-f', 'lavfi',
+            // '-i', 'anullsrc',
         ]);
     }
         
     conf = conf.concat([
-        '-thread_queue_size', '1000',
+        //'-thread_queue_size', '1000',
         '-rtsp_transport', 'tcp',
-        '-use_wallclock_as_timestamps', '1',
+        "-fflags", "+genpts",
+        "-re",
         '-i', 'rtsp://' + ffmpeg.cfg('ip') + ':554/user=admin_password=tlJwpbo6_channel=1_stream=0.sdp?real_stream',
+        '-f', 'lavfi',
+        '-i', 'anullsrc',
+        '-use_wallclock_as_timestamps', '1',
         '-c:v', 'copy',
         '-c:a', 'aac',
-        '-strict', 'experimental',
+        "-threads", "1",
         '-f', 'flv',
         'rtmp://a.rtmp.youtube.com/live2/' + ffmpeg.cfg('stream_id')
     ]);
@@ -107,7 +111,7 @@ ffmpeg.start = function () {
     if( ffmpeg.isRun() ){
         return;
     }else{
-        ffmpeg.kill_stream();
+        ffmpeg.kill_stream('(start) !isRun()');
     }
     
     if(!ffmpeg.isRun() ){
@@ -120,8 +124,8 @@ ffmpeg.start = function () {
 
 };
 
-ffmpeg.kill_stream = function(){
-    debug('Killing stream');
+ffmpeg.kill_stream = function(reason){
+    debug(`Killing stream: ${reason}`);
     try {
         ffmpeg.ffmpeg_youtube.stderr.removeListener('close', ffmpeg.onClose);
         ffmpeg.ffmpeg_youtube.kill('SIGKILL');
@@ -206,4 +210,4 @@ debug('Starting...');
 clearInterval(ffmpeg.interval);
 ffmpeg.interval = setInterval(ffmpeg.check_db, 5000);
 
-module.exports = ffmpeg;
+export default ffmpeg;
