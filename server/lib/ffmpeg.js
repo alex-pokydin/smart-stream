@@ -2,9 +2,10 @@ var debug = require('debug')('smart-stream:ffmpeg');
 var os = require('os');
 const { spawn } = require('child_process');
 var progressStream = require('ffmpeg-progress-stream');
-var JsonDB = require('node-json-db');
-var db = new JsonDB("config/conf", true, true);
+var {JsonDB, Config} = require('node-json-db');
+var db = new JsonDB(new Config("config/conf", true, false, '/'), true, true);
 
+debug('config: %j', db.getData("/"));
 
 var ffmpeg = {
 
@@ -21,12 +22,12 @@ var ffmpeg = {
     cfg: function(param){
         return ffmpeg.config[param];
     },
-    check_db: function(start, stop){
+    check_db: async function(start, stop){
         start = start || function(){};
         stop = stop || function(){};
         db.reload();
-        ffmpeg.config = db.getData("/");
-
+        ffmpeg.config = await db.getData("/");
+        
         if( ffmpeg.cfg('autostart') ){
             ffmpeg.start();
             start();
@@ -97,7 +98,7 @@ ffmpeg.params_youtube = function(){
 
 ffmpeg.stop = function (reason) {
     debug('Stopping! ' + reason);
-    ffmpeg.kill_stream();
+    ffmpeg.kill_stream(reason);
 
     // clear start interval
     clearInterval(ffmpeg.interval);
@@ -210,4 +211,4 @@ debug('Starting...');
 clearInterval(ffmpeg.interval);
 ffmpeg.interval = setInterval(ffmpeg.check_db, 5000);
 
-export default ffmpeg;
+module.exports = ffmpeg;

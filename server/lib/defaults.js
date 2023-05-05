@@ -1,11 +1,11 @@
-var debug = require('debug')('proj:server');
+var debug = require('debug')('smart-stream:defaults');
 
-export default {
+module.exports = {
 
-    init: function(app){ 
+    init: async function(app){ 
         var conf ={};
         try {
-            conf = app.db.getData("/");
+            conf = await app.db.getData("/");
         } catch(error) {
             console.error(error);
         };
@@ -18,6 +18,7 @@ export default {
         conf.audio = conf.audio || false;
         conf.stream_id = conf.stream_id || false;
         
+        debug('config: %O', conf);
         app.db.push("/",conf); 
     }
     

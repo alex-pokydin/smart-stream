@@ -1,19 +1,19 @@
-import { JsonDB, Config } from 'node-json-db';
-import createError from 'http-errors';
-import express from 'express';
-import path from 'path';
-import cookieParser from 'cookie-parser';
-import bodyParser from 'body-parser';
-import debug from 'debug';
-import http from 'http';
-import { Cam } from 'onvif';
-
-import ffmpeg from './lib/ffmpeg.js';
-import defaults from './lib/defaults.js';
+// call the packages we need
+var createError = require('http-errors');
+var express    = require('express');        // call express
+var path = require('path');
+var cookieParser = require('cookie-parser');
+var bodyParser = require('body-parser');
+var debug = require('debug')('smart-stream:server');
+var http = require('http');
+var ffmpeg = require('./lib/ffmpeg');
+var defaults = require('./lib/defaults');
+var Cam = require('onvif').Cam;
+var {JsonDB, Config} = require('node-json-db');
 
 //var JsonDB = require('node-json-db');
 
-var db = new JsonDB("config/conf", true, true);
+var db = new JsonDB(new Config("config/conf", true, true, '/'), true, true);
 
 var indexRouter = require('./routes/index');
 var onvifRouter = require('./routes/onvif');
@@ -34,7 +34,7 @@ app.use(bodyParser.json());
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
 
-app.use(logger('dev'));
+// app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());

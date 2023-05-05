@@ -1,7 +1,7 @@
 var express = require('express');
 var http = require('http');
 var router = express.Router();
-var JsonDB = require('node-json-db');
+var JsonDB = require('node-json-db').JsonDB;
 var db = new JsonDB("config/conf", true, true);
 
 /* GET users listing. */

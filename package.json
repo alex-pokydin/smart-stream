@@ -2,7 +2,6 @@
   "name": "smart-stream",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "stop": "forever stopall",
     "start": "forever start forever/development.json",

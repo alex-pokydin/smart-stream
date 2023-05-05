@@ -63,6 +63,12 @@ sudo systemctl enable mongodb
 
 
 ## install ffmpeg on WIN
+
+```
+winget install ffmpeg
+```
+or
+
 download and uzip ffmpeg from official site
 https://github.com/adaptlearning/adapt_authoring/wiki/Installing-FFmpeg
 ```
