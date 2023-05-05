@@ -3,7 +3,7 @@ var
   Cam = require('onvif').Cam;
 
 new Cam({
-  hostname: '192.168.3.10',
+  hostname: '192.168.6.121',
   username: 'admin',
   password: '',
   port: '8899'

@@ -6,10 +6,10 @@
     "stop": "forever stopall",
     "start": "forever start forever/development.json",
     "start-dev": "cross-env DEBUG=smart-stream:* forever start forever/development.json",
-    "dev": "cross-env DEBUG=* nodemon --ignore './config/*' server/server.js"
+    "dev": "cross-env DEBUG=* nodemon server/server.js"
   },
   "nodemonConfig": {
-    "ignore": ["**/test/**", "**/docs/**"],
+    "ignore": ["**/config/**"],
     "watch": ["**/server/**", "**/public/**"],
     "delay": 1000
   },
