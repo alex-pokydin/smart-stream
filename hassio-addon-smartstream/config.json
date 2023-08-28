@@ -1,0 +1,14 @@
+{
+  "name": "Stream IpCam to Youtube",
+  "version": "0.003",
+  "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
+  "slug": "stream_youtube_hassio",
+  "description": "Stream IpCam to Youtube addons",
+  "startup": "application",
+  "boot": "auto",
+  "map": [
+    "share:rw"
+  ],
+  "options": {},
+  "schema": {}
+}

@@ -6,7 +6,8 @@
     "stop": "forever stopall",
     "start": "forever start forever/development.json",
     "start-dev": "cross-env DEBUG=smart-stream:* forever start forever/development.json",
-    "dev": "cross-env DEBUG=* nodemon server/server.js"
+    "dev": "cross-env DEBUG=* nodemon server/server.js",
+    "docker": "node server/server.js"
   },
   "nodemonConfig": {
     "ignore": ["**/config/**"],

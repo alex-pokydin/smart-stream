@@ -6,7 +6,7 @@ var debug = require("debug")("smart-stream:web");
 router.get("/", async function (req, res, next) {
   res.render("index", {
     title: "Welcome",
-    cameras: await req.app.db.get("cams").catch(() => []),
+    cameras: (await req.app.db.get("cams").catch(() => [])) || [],
   });
 });
 
