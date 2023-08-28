@@ -5,7 +5,7 @@ ENV LANG C.UTF-8
 
 ADD package.json /
 
-RUN npm install
+# RUN npm install
 
 # RUN \ 
 #     apk add --no-cache \
