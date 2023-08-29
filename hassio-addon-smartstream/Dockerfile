@@ -7,11 +7,12 @@ ADD package.json /
 
 
 RUN \ 
-    apk add --no-cache \
+    apk update && apk add --no-cache \
         nodejs \
-        npm
+        npm \
+        ffmpeg
 
-RUN npm install
+#RUN npm install
 
 # Copy data for add-on
 COPY run.sh /
