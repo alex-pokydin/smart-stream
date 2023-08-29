@@ -10,7 +10,8 @@ RUN \
     apk update && apk add --no-cache \
         nodejs \
         npm \
-        ffmpeg
+        ffmpeg \
+        git
 
 #RUN npm install
 
