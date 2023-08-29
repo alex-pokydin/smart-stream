@@ -6,6 +6,8 @@
   "description": "Stream IpCam to Youtube addons",
   "startup": "application",
   "boot": "auto",
+  "init": false,
+  "host_network": true,
   "map": [
     "share:rw"
   ],
