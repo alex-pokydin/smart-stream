@@ -3,9 +3,6 @@ FROM $BUILD_FROM
 
 ENV LANG C.UTF-8
 
-ADD package.json /
-
-
 RUN \ 
     apk update && apk add --no-cache \
         nodejs \
@@ -13,7 +10,7 @@ RUN \
         ffmpeg \
         git
 
-#RUN npm install
+ADD package.json /
 
 # Copy data for add-on
 COPY run.sh /
