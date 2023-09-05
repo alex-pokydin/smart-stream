@@ -3,7 +3,7 @@ var { JsonDB, Config } = require("node-json-db");
 
 module.exports = {
   app: null,
-  db: new JsonDB(new Config("config/conf", true, true, "/"), true, true),
+  db: new JsonDB(new Config("/data/conf", true, true, "/"), true, true),
   conf: null,
 
   init: async function (app) {
