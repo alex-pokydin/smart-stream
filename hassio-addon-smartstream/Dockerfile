@@ -19,7 +19,7 @@ RUN \
         --omit=dev \
         --unsafe-perm \
     \
-    && npm cache clear --force \
+    && npm cache clear --force
 # Copy data for add-on
 COPY run.sh /
 COPY server/ /server/

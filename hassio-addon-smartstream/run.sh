@@ -7,7 +7,7 @@ set -e
 echo Hello!
 node -v
 npm -v
-npm install
+# npm install
 # node index.js
 
 npm run docker
