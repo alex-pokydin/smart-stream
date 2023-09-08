@@ -35,6 +35,13 @@ module.exports = {
     });
   },
 
+  del: async function (param) {
+    return this.db.delete("/" + param).then(() => {
+      debug('del("/%s")', param);
+      return true;
+    });
+  },
+
   setCams: async function (cams) {
     for (let i in cams) {
       let cam = await this.get(`cams/${cams[i].hostname}`).catch(debug);
@@ -59,10 +66,13 @@ module.exports = {
       (await this.get(`cams/${hostname}/${key}`).catch(debug)) || def;
     let set = async (key, value) =>
       await this.set(`cams/${hostname}/${key}`, value);
+    let del = async () =>
+      await this.del(`cams/${hostname}`);
     
       return {
       get,
       set,
+      del,
       toggle: async () => set("autostart", !(await get("autostart", false))),
     };
   },

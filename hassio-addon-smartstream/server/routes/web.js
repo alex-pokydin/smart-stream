@@ -29,6 +29,12 @@ router.post("/", async function (req, res, next) {
     return res.redirect("/");
   });
 
+  router.post("/:hostname/delete", async function (req, res, next) {
+    let cam = req.app.db.getCam(req.params.hostname);
+    await cam.del().catch(debug);
+    return res.redirect("/");
+  });
+
   router.post("/:hostname/stream_id", async function (req, res, next) {
     let cam = req.app.db.getCam(req.params.hostname);
     await cam.set('stream_id', req.body.stream_id).catch(debug);

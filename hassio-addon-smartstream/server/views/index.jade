@@ -10,7 +10,10 @@ block content
           img.card-img-top(src=camera.snapshotUrl, alt='Camera Image', height='200')
           .card-body
             h5.card-title= camera.name
-            p.card-text= camera.hostname + ':' + camera.port
+            form(action='#{camera.hostname}/delete', method='post')
+              .form-group.row
+                p.col-sm.card-text= camera.hostname + ':' + camera.port
+                button.col-sm-4.btn.btn-primary(type='submit') Delete
             p.card-text= camera.username + ' / ' + camera.password
             form(action='#{camera.hostname}/auto', method='post')
               .form-group.row
