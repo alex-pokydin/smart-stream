@@ -8,8 +8,8 @@ COPY package.json /
 RUN \ 
     apk update \
     && apk add --no-cache \
-        nodejs=18.17.1-r0 \
-        npm=9.6.6-r0 \
+        nodejs \
+        npm \
         ffmpeg \
         git \
     && npm install \
