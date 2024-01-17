@@ -9,7 +9,7 @@ block content
       li.card.col-3
           img.card-img-top(src=camera.snapshotUrl, alt='Camera Image', height='200')
           .card-body
-            h5.card-title= #{index} | camera.name
+            h5.card-title= index | camera.name
             form(action='#{index}/delete', method='post')
               .form-group.row
                 p.col-sm.card-text= camera.hostname + ':' + camera.port

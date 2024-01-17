@@ -19,7 +19,7 @@ module.exports = {
   },
 
   get: function (param = "") {
-    this.db.reload();
+    this.db.reload().catch(debug);
     return this.db.getData("/" + param).then((data) => {
       debug('get("/%s") = %s...', param, JSON.stringify(data).substring(0, 40));
       return data;
@@ -30,7 +30,7 @@ module.exports = {
   },
 
   set: async function (param, value) {
-    this.db.reload();
+    this.db.reload().catch(debug);
     return this.db.push("/" + param, value).then(() => {
       debug('set("/%s") = %o', param, value);
       return value;
@@ -38,7 +38,7 @@ module.exports = {
   },
 
   del: async function (param) {
-    this.db.reload();
+    this.db.reload().catch(debug);
     return this.db.delete("/" + param).then(() => {
       debug('del("/%s")', param);
       return true;
