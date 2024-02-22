@@ -10,7 +10,7 @@ RUN \
     && apk add --no-cache \
         nodejs \
         npm \
-        "ffmpeg=6.0.1" \
+        ffmpeg \
         git \
         nano \
     && npm install \
