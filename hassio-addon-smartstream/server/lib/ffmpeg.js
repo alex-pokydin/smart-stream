@@ -163,15 +163,17 @@ module.exports = (stream) => {
         //     test_data.speed = false;
         //     test += 1;
         // }
-        if (prev_frame != 0 && data.frame == prev_frame) {
-          test_data.frame = false;
-          test += 1;
-          debug({
-            error: "prev_frame problem!!!!",
-            frame: data.frame,
-            prev: prev_frame,
-          });
-        }
+        
+        // no frames
+        // if (prev_frame != 0 && data.frame == prev_frame) {
+        //   test_data.frame = false;
+        //   test += 1;
+        //   debug({
+        //     error: "prev_frame problem!!!!",
+        //     frame: data.frame,
+        //     prev: prev_frame,
+        //   });
+        // }
         if (prev_time != "" && data.time == prev_time) {
           test_data.time = false;
           //test += 1;
