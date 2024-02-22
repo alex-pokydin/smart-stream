@@ -12,9 +12,11 @@ module.exports = (stream) => {
 
     isRun: function () {
       var isRun =
-        this.prev_time &&
-        this.ffmpeg_youtube !== false &&
-        Math.floor(new Date() - this.prev_time) < 2000;
+      this.prev_time &&
+      this.ffmpeg_youtube !== false &&
+      Math.floor(new Date() - this.prev_time) < 10000;
+
+      debug("isRun(): %o", {isRun, prev_time: this.prev_time, ffmpeg_youtube: this.ffmpeg_youtube, time: Math.floor(new Date() - this.prev_time)});
       return isRun;
     },
 

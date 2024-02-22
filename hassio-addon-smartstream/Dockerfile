@@ -12,6 +12,7 @@ RUN \
         npm \
         ffmpeg \
         git \
+        nano \
     && npm install \
         --no-audit \
         --no-fund \
