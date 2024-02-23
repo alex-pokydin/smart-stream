@@ -10,8 +10,13 @@
     "docker": "DEBUG=smart-stream:* node server/server.js"
   },
   "nodemonConfig": {
-    "ignore": ["**/config/**"],
-    "watch": ["**/server/**", "**/public/**"],
+    "ignore": [
+      "**/config/**"
+    ],
+    "watch": [
+      "**/server/**",
+      "**/public/**"
+    ],
     "delay": 1000
   },
   "dependencies": {
@@ -20,7 +25,7 @@
     "cookie-parser": "^1.4.3",
     "debug": "^4.3.4",
     "express": "^4.18.2",
-    "ffmpeg-progress-stream": "^1.2.1",
+    "ffmpeg-progress-stream": "github:alex-pokydin/ffmpeg-progress-stream",
     "http-errors": "^2.0.0",
     "jade": "^1.11.0",
     "node-json-db": "^2.2.0",
