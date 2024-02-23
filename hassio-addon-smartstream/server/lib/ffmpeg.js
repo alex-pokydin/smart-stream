@@ -148,7 +148,7 @@ module.exports = (stream) => {
     ffmpeg.ffmpeg_youtube.stderr
       .pipe(progressStream())
       .on("data", function (data) {
-        //console.log( JSON.stringify([data.fps,parseFloat(data.speed), data.time]) );
+        //debug("%o", data);
         var test = 0;
         var test_data = {
           fps: true,
@@ -176,7 +176,7 @@ module.exports = (stream) => {
         // }
         if (prev_time != "" && data.time == prev_time) {
           test_data.time = false;
-          //test += 1;
+          test += 1;
           debug({
             error: "prev_time problem!!!!",
             time: data.time,
