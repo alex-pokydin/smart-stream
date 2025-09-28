@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:latest
+ARG BUILD_FROM
 FROM $BUILD_FROM
 
 ENV LANG=C.UTF-8
@@ -44,11 +44,7 @@ ENV NODE_ENV=production
 COPY run.sh /
 RUN chmod a+x /run.sh
 
-# Expose ports
-EXPOSE 3000 3001
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+# Ports are handled by Home Assistant ingress and port mapping
+# No need to EXPOSE when using ingress system
 
 CMD [ "/run.sh" ]

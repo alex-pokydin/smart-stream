@@ -22,19 +22,16 @@ Advanced IP camera streaming to multiple platforms (YouTube, Twitch, Custom RTMP
 
 ### Add-on Options
 
-```json
-{
-  "port": 3000,
-  "log_level": "info"
-}
+```yaml
+options:
+  log_level: "info"
 ```
 
-- **port** (optional): Port for the web interface and API (default: 3000)
 - **log_level** (optional): Logging level - debug, info, warn, or error (default: info)
 
 ## Usage
 
-1. **Access the Web UI**: Click "Open Web UI" in the add-on page, or navigate to `http://[HA_IP]:[PORT]`
+1. **Access the Web UI**: Click "Open Web UI" in the add-on page (Home Assistant ingress automatically handles routing)
 2. **Add Cameras**: Use the camera discovery feature or manually add IP cameras
 3. **Configure Streaming**: Set up streaming keys for YouTube, Twitch, or custom RTMP
 4. **Start Streaming**: Begin streaming to your preferred platforms
