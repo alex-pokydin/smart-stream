@@ -31,13 +31,14 @@ mkdir -p "$LOG_DIR"
 # Change to app directory
 cd /app
 
-# Copy frontend static files to backend public directory for serving
+# Copy frontend static files to public directory for serving
 bashio::log.info "Setting up frontend static files..."
-mkdir -p /app/apps/backend/public
-cp -r /app/apps/frontend/dist/* /app/apps/backend/public/
+mkdir -p /app/public
+cp -r /app/apps/frontend/dist/* /app/public/
 
 # For debugging - show what files were copied
-bashio::log.info "Frontend files setup complete"
+bashio::log.info "Frontend files setup complete. Files in /app/public:"
+ls -la /app/public/ | head -10
 
 # Start the application
 bashio::log.info "Starting Smart Stream on port $PORT..."

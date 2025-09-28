@@ -30,7 +30,7 @@ COPY apps/ ./apps/
 RUN pnpm install --frozen-lockfile --shamefully-hoist
 
 # Build the project with environment variables
-ENV ADDON_VERSION=1.0.7
+ENV ADDON_VERSION=1.0.8
 ENV HOME_ASSISTANT=true
 RUN pnpm build
 
