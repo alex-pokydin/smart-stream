@@ -104,8 +104,9 @@ export class SmartStreamApp {
   }
 
   private setupRoutes(): void {
-    // Health check endpoint
+    // Health check endpoints (both for legacy and API)
     this.app.use('/health', createHealthRouter(this.database, this.onvif, this.streaming));
+    this.app.use('/api/v1/health', createHealthRouter(this.database, this.onvif, this.streaming));
     
     // API routes
     this.app.use('/api/v1', createApiRouter());

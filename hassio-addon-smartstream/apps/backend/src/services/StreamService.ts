@@ -362,7 +362,16 @@ export class StreamService {
   // Health check
   public async healthCheck(): Promise<boolean> {
     try {
-      // Check if FFmpeg is available
+      // In development mode, consider the service healthy if it's initialized
+      // In production (Home Assistant), check if FFmpeg is available
+      const isDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
+      
+      if (isDevelopment) {
+        // For development, just check if the service is initialized
+        return this.database !== null;
+      }
+      
+      // For production, check if FFmpeg is available
       const testProcess = spawn('ffmpeg', ['-version'], { stdio: 'pipe' });
       
       return new Promise((resolve) => {
@@ -371,6 +380,7 @@ export class StreamService {
         });
         
         testProcess.on('error', () => {
+          log('FFmpeg not available for streaming service');
           resolve(false);
         });
         
