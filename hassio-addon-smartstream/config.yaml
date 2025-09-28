@@ -29,10 +29,12 @@ ports_description:
 options:
   port: 3303
   log_level: "info"
+  discovery_interface: ""
   
 schema:
   port: "port"
   log_level: "list(debug|info|warn|error)"
+  discovery_interface: "str"
 
 # Startup configuration
 startup: application
@@ -58,7 +60,7 @@ services:
 # Security
 hassio_api: true
 hassio_role: "default"
-host_network: false
+host_network: true
 privileged:
   - "SYS_ADMIN"
 full_access: false

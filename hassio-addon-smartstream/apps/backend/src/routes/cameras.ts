@@ -214,23 +214,39 @@ export function createCameraRouter(
   );
 
   // POST /cameras/discover - Discover ONVIF cameras
-  router.post('/discover', async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const startTime = Date.now();
-      const cameras = await onvif.discoverCameras();
-      const duration = Date.now() - startTime;
-      
-      const response: ApiResponse<DiscoveryResponse> = {
-        success: true,
-        data: { cameras, duration },
-        message: `Discovered ${cameras.length} cameras in ${duration}ms`
-      };
-
-      res.json(response);
-    } catch (error) {
-      next(error);
-    }
+  const discoveryOptionsSchema = z.object({
+    timeout: z.number().min(1000).max(30000).optional(),
+    interface: z.string().optional()
   });
+
+  router.post('/discover', 
+    validateBody(discoveryOptionsSchema.optional()),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const startTime = Date.now();
+        
+        // Get options from request body or use environment/config defaults
+        const options = {
+          timeout: req.body?.timeout || 5000,
+          interface: req.body?.interface || process.env.DISCOVERY_INTERFACE || undefined
+        };
+        
+        log('Starting ONVIF discovery with options: %j', options);
+        const cameras = await onvif.discoverCameras(options);
+        const duration = Date.now() - startTime;
+        
+        const response: ApiResponse<DiscoveryResponse> = {
+          success: true,
+          data: { cameras, duration },
+          message: `Discovered ${cameras.length} cameras in ${duration}ms`
+        };
+
+        res.json(response);
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
 
   // GET /cameras/:hostname/test - Test camera connection
   router.get(

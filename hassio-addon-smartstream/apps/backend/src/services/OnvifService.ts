@@ -5,6 +5,11 @@ import { CameraDiscoveryResult, OnvifCamera, CameraConfig } from '@smart-stream/
 
 const log = debug('smart-stream:onvif');
 
+export interface DiscoveryOptions {
+  timeout?: number;
+  interface?: string;
+}
+
 export class OnvifService {
   private database: DatabaseService | null = null;
   private discoveryCache: CameraDiscoveryResult[] = [];
@@ -25,12 +30,23 @@ export class OnvifService {
     }
   }
 
-  public async discoverCameras(timeout: number = 5000): Promise<CameraDiscoveryResult[]> {
+  public async discoverCameras(options: DiscoveryOptions = {}): Promise<CameraDiscoveryResult[]> {
+    const {
+      timeout = 5000,
+      interface: networkInterface
+    } = options;
+
     return new Promise((resolve, reject) => {
-      log('Starting camera discovery...');
+      log('Starting ONVIF camera discovery with timeout: %dms', timeout);
       const startTime = Date.now();
 
-      Discovery.probe({ timeout }, async (err: Error | null, cameras?: any[]) => {
+      const discoveryOptions: any = { timeout };
+      if (networkInterface) {
+        discoveryOptions.interface = networkInterface;
+        log('Using network interface: %s', networkInterface);
+      }
+
+      Discovery.probe(discoveryOptions, async (err: Error | null, cameras?: any[]) => {
         const duration = Date.now() - startTime;
         
         if (err) {
@@ -54,7 +70,7 @@ export class OnvifService {
           this.lastDiscovery = new Date();
 
           // Save discovered cameras to database if database is available
-          if (this.database) {
+          if (this.database && discoveredCameras.length > 0) {
             const cameraConfigs: CameraConfig[] = discoveredCameras.map(cam => ({
               hostname: cam.hostname,
               port: cam.port,
@@ -74,6 +90,7 @@ export class OnvifService {
       });
     });
   }
+
 
   public async getCamera(options: {
     hostname: string;
@@ -241,9 +258,9 @@ export class OnvifService {
     };
   }
 
-  public async refreshDiscovery(): Promise<CameraDiscoveryResult[]> {
+  public async refreshDiscovery(options?: DiscoveryOptions): Promise<CameraDiscoveryResult[]> {
     log('Refreshing camera discovery...');
-    return await this.discoverCameras();
+    return await this.discoverCameras(options);
   }
 
   // Health check

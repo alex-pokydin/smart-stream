@@ -5,6 +5,7 @@ set -e
 # Load configuration from Home Assistant
 LOG_LEVEL=$(bashio::config 'log_level')
 CONFIGURED_PORT=$(bashio::config 'port')
+DISCOVERY_INTERFACE=$(bashio::config 'discovery_interface')
 
 # Use configured port, default to 3303
 PORT=${CONFIGURED_PORT:-3303}
@@ -19,6 +20,7 @@ export PORT="$PORT"
 export LOG_LEVEL="$LOG_LEVEL"
 export ADDON_VERSION="$ADDON_VERSION"
 export DEBUG="smart-stream:*"
+export DISCOVERY_INTERFACE="$DISCOVERY_INTERFACE"
 
 # Set data directory for the application
 export DATA_DIR="/share/smart-stream/data"
