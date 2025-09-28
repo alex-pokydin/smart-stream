@@ -1,8 +1,0 @@
-// forever/development.json
-{
-    "uid": "app",
-    "append": true,
-    "watch": true,
-    "script": "server/server.js",
-    "sourceDir": "."
-}

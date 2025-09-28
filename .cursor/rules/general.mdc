@@ -1,0 +1,164 @@
+---
+alwaysApply: true
+---
+
+# Smart Stream Project Rules
+
+## Project Overview
+Smart Stream is a **Home Assistant Add-on** for streaming IP cameras to platforms like YouTube. This is a modern TypeScript/React/Node.js application.
+
+## Architecture & Technology Stack
+
+### **Monorepo Structure (pnpm)**
+- `packages/shared` - **@smart-stream/shared** - Shared TypeScript types and utilities
+- `apps/backend` - **@smart-stream/backend** - Express.js API server with TypeScript
+- `apps/frontend` - **@smart-stream/frontend** - React SPA with Vite and Tailwind CSS
+
+### **Core Technologies**
+- **Backend**: TypeScript + Express.js + node-json-db + Zod + ONVIF + FFmpeg
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + React Router
+- **Shared**: TypeScript types for API contracts and data models
+- **Package Manager**: pnpm with workspace configuration
+- **Container**: Docker (Home Assistant Add-on)
+
+### **Key Dependencies**
+- **Validation**: Zod for runtime type checking and API validation
+- **UI**: Tailwind CSS with custom component classes
+- **Icons**: Lucide React for consistent iconography
+- **HTTP Client**: Axios with interceptors for API communication
+- **Camera Protocol**: ONVIF for IP camera discovery and control
+- **Streaming**: FFmpeg for video processing and streaming
+
+## Development Principles
+
+### **Type Safety First**
+- Strict TypeScript configuration across all packages
+- Shared types in `@smart-stream/shared` ensure API contract consistency
+- Zod schemas for runtime validation of external data
+- No `any` types - prefer proper interfaces and type definitions
+
+### **Monorepo Workflow**
+- Use workspace dependencies (`workspace:*`) for internal packages
+- Build shared types first: `pnpm shared:build`
+- Parallel build: `pnpm build` builds all apps (use this command to validate changes)
+
+### **Code Organization**
+- **Backend**: Service-oriented architecture with clear separation of concerns
+- **Frontend**: Component-driven development with custom hooks
+- **Shared**: Domain-specific type organization (camera, stream, config, api)
+- **Configuration**: TypeScript configs extend from strict base configurations
+
+### **API Design**
+- RESTful endpoints with consistent response format (`ApiResponse<T>`)
+- Versioned API (`/api/v1/`) for future compatibility
+- Comprehensive error handling with typed error responses
+- Input validation with Zod schemas and middleware
+
+### **UI/UX Standards**
+- Responsive design with mobile-first approach
+- Consistent component library using Tailwind utility classes
+- Toast notifications for user feedback
+- Loading states and error boundaries for better UX
+
+## Development Commands
+
+### **Essential Workflows**
+```bash
+# Build all packages
+pnpm build
+
+# Type checking
+pnpm type-check
+```
+
+### **Code Quality**
+```bash
+# Linting
+pnpm lint
+
+# Formatting
+pnpm format
+
+# Type checking specific package
+pnpm --filter @smart-stream/backend type-check
+```
+
+## Project Constraints & Context
+
+### **Home Assistant Integration**
+- Must work within Home Assistant Add-on container environment
+- Configuration via `config.json` (Home Assistant standard)
+- No external authentication needed (HA handles access control)
+- Data persistence in `/data` directory
+
+### **Camera Support**
+- ONVIF protocol for IP camera discovery and configuration
+- Support for RTSP streaming protocols
+- Camera credential management with secure storage
+- Auto-discovery of cameras on local network
+
+### **Streaming Capabilities**
+- FFmpeg-based video processing and streaming
+- Real-time stream monitoring and statistics
+- Graceful handling of stream failures and reconnection
+
+## File Naming & Structure Conventions
+
+### **TypeScript Files**
+- PascalCase for components and services: `CameraService.ts`, `Dashboard.tsx`
+- camelCase for utilities and hooks: `useHealthCheck.ts`, `apiClient.ts`
+- Descriptive names that indicate purpose and domain
+
+### **Directory Organization**
+- Group by feature/domain rather than file type
+- Shared utilities in appropriate service/utility directories
+- Keep related files close together (component + types + hooks)
+
+### **Import/Export Patterns**
+- Use `@smart-stream/shared` for cross-package type imports
+- Path aliases: `@/` for relative imports within packages
+- Named exports preferred over default exports for better tree-shaking
+- Re-export from index files for clean public APIs
+
+## Error Handling & Validation
+
+### **Backend Error Strategy**
+- Custom error classes: `ValidationError`, `CameraNotFoundError`, `StreamError`
+- Structured error responses with error codes and details
+- Comprehensive error middleware with request context
+- Graceful degradation for non-critical failures
+
+### **Frontend Error Strategy**
+- Error boundaries for component-level error catching
+- Toast notifications for user-facing errors
+- Loading states during async operations
+- Fallback UI for failed data loads
+
+### **Validation Strategy**
+- Zod schemas for API input validation
+- TypeScript interfaces for compile-time type checking
+- Runtime validation for external data (camera configs, API responses)
+- Clear error messages for validation failures
+
+## Performance & Optimization
+
+### **Build Optimization**
+- TypeScript strict mode for better compiler optimizations
+- Vite for fast frontend builds and HMR
+- pnpm for efficient dependency management
+- Incremental builds with workspace dependencies
+
+### **Runtime Performance**
+- React.memo for component optimization where needed
+- Efficient API polling with proper cleanup
+- Stream monitoring without excessive resource usage
+- Database operations optimized for small datasets
+
+---
+
+## Notes for AI Assistance
+- Prefer TypeScript solutions with proper typing
+- Follow established patterns in existing codebase
+- Use workspace packages for shared functionality
+- Maintain consistency with Tailwind utility classes
+- Consider Home Assistant Add-on constraints in suggestions

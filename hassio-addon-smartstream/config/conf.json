@@ -1,0 +1,26 @@
+{
+    "cams": {
+        "192.168.5.163": {
+            "hostname": "192.168.5.163",
+            "port": "8080",
+            "username": "admin",
+            "password": "aDmin123",
+            "autostart": true,
+            "stream_id": "wkh2-qee4-790e-ahk2-bd2u",
+            "rtspUrl": "rtsp://192.168.5.163:554/11",
+            "snapshotUrl": "http://192.168.5.163:80/tmpfs/auto.jpg",
+            "stats": {
+                "fps": 14,
+                "size": "22kB",
+                "time": "00:00:01.04",
+                "bit": "170.2kbits/s",
+                "speed": "1.02x",
+                "cpu": [
+                    0,
+                    0,
+                    0
+                ]
+            }
+        }
+    }
+}
