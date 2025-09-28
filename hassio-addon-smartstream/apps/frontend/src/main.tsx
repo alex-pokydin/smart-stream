@@ -5,9 +5,24 @@ import { Toaster } from 'react-hot-toast';
 import App from './App.tsx';
 import './index.css';
 
+// Detect if running in Home Assistant ingress
+const getBasename = (): string => {
+  // For Home Assistant ingress, the basename is derived from the current path
+  if (typeof window !== 'undefined') {
+    const pathname = window.location.pathname;
+    // Home Assistant ingress URLs look like: /api/hassio_ingress/TOKEN/
+    const ingressMatch = pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
+    if (ingressMatch) {
+      return ingressMatch[1];
+    }
+  }
+  return '/';
+};
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter
+      basename={getBasename()}
       future={{
         v7_startTransition: true,
         v7_relativeSplatPath: true,

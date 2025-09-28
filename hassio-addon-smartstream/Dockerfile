@@ -29,7 +29,9 @@ COPY apps/ ./apps/
 # Install all dependencies (including devDependencies for build)
 RUN pnpm install --frozen-lockfile --shamefully-hoist
 
-# Build the project
+# Build the project with environment variables
+ENV ADDON_VERSION=1.0.7
+ENV HOME_ASSISTANT=true
 RUN pnpm build
 
 # Remove devDependencies and clean up

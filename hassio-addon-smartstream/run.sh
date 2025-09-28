@@ -4,9 +4,10 @@ set -e
 
 # Load configuration from Home Assistant
 LOG_LEVEL=$(bashio::config 'log_level')
+CONFIGURED_PORT=$(bashio::config 'port')
 
-# Get ports from Home Assistant config
-PORT=$(bashio::addon.port 3000)
+# Use configured port, default to 3303
+PORT=${CONFIGURED_PORT:-3303}
 ADDON_VERSION=$(bashio::addon.version)
 
 bashio::log.info "Starting Smart Stream Add-on v${ADDON_VERSION}..."
@@ -34,6 +35,9 @@ cd /app
 bashio::log.info "Setting up frontend static files..."
 mkdir -p /app/apps/backend/public
 cp -r /app/apps/frontend/dist/* /app/apps/backend/public/
+
+# For debugging - show what files were copied
+bashio::log.info "Frontend files setup complete"
 
 # Start the application
 bashio::log.info "Starting Smart Stream on port $PORT..."

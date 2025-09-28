@@ -24,9 +24,11 @@ Advanced IP camera streaming to multiple platforms (YouTube, Twitch, Custom RTMP
 
 ```yaml
 options:
+  port: 3303
   log_level: "info"
 ```
 
+- **port** (optional): Port for the web interface and API (default: 3303)
 - **log_level** (optional): Logging level - debug, info, warn, or error (default: info)
 
 ## Usage

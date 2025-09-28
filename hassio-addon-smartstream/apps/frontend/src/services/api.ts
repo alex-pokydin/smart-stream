@@ -10,9 +10,22 @@ import {
   StartStreamRequest
 } from '@smart-stream/shared';
 
+// Detect API base URL for Home Assistant ingress compatibility
+const getApiBaseURL = (): string => {
+  if (typeof window !== 'undefined') {
+    const pathname = window.location.pathname;
+    // Home Assistant ingress URLs look like: /api/hassio_ingress/TOKEN/
+    const ingressMatch = pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
+    if (ingressMatch) {
+      return `${ingressMatch[1]}/api/v1`;
+    }
+  }
+  return '/api/v1';
+};
+
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: getApiBaseURL(),
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

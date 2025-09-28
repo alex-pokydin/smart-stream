@@ -1,7 +1,7 @@
 ---
 name: "Smart Stream"
 description: "Advanced IP camera streaming to multiple platforms (YouTube, Twitch, Custom RTMP) with ONVIF support"
-version: 1.0.4
+version: 1.0.7
 slug: smart_stream
 init: false
 arch:
@@ -13,23 +13,25 @@ arch:
 
 # Home Assistant specific configuration
 ingress: true
-ingress_port: 3000
+ingress_port: 3303
 panel_icon: mdi:camera-wireless
 panel_title: Smart Stream
 homeassistant_api: true
 
 # Ports configuration
 ports:
-  "3000/tcp": 3000
+  "3303/tcp": 3303
 
 ports_description:
-  "3000/tcp": "Web UI and API Port"
+  "3303/tcp": "Web UI and API Port"
 
 # Options schema
 options:
+  port: 3303
   log_level: "info"
   
 schema:
+  port: "port"
   log_level: "list(debug|info|warn|error)"
 
 # Startup configuration
@@ -41,10 +43,10 @@ map:
   - "media:rw"
 
 # Web UI configuration
-webui: "http://[HOST]:[PORT:3000]"
+webui: "http://[HOST]:[PORT:3303]"
 
 # Watchdog configuration for health monitoring
-watchdog: "http://[HOST]:[PORT:3000]/health"
+watchdog: "http://[HOST]:[PORT:3303]/health"
 
 # Documentation
 url: "https://github.com/your-repo/smart-stream"
