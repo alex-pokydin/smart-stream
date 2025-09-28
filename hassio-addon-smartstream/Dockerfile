@@ -1,7 +1,7 @@
-ARG BUILD_FROM
+ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:latest
 FROM $BUILD_FROM
 
-ENV LANG C.UTF-8
+ENV LANG=C.UTF-8
 ENV NODE_ENV=production
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -17,8 +17,7 @@ RUN apk update && apk add --no-cache \
     python3 \
     make \
     g++ \
-    && npm install -g pnpm@8.10.0 \
-    && corepack enable
+    && npm install -g pnpm@8.15.9 --force
 
 # Set working directory
 WORKDIR /app
@@ -29,9 +28,9 @@ COPY packages/ ./packages/
 COPY apps/ ./apps/
 
 # Install dependencies and build
-RUN pnpm install --frozen-lockfile --prod=false \
+RUN pnpm install --frozen-lockfile --shamefully-hoist \
     && pnpm build \
-    && pnpm install --frozen-lockfile --prod \
+    && pnpm prune --production \
     && pnpm store prune \
     && npm cache clean --force
 

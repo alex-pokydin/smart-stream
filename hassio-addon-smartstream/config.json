@@ -1,6 +1,6 @@
 {
   "name": "Smart Stream",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
   "slug": "smart_stream",
   "description": "Advanced IP camera streaming to multiple platforms (YouTube, Twitch, Custom RTMP) with ONVIF support",
