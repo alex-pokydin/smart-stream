@@ -17,7 +17,6 @@ RUN apk update && apk add --no-cache \
     make \
     g++ \
     bind-tools \
-    dnsutils \
     && npm install -g pnpm@8.15.9 --force
 
 # Configure DNS fallback servers for better resolution
