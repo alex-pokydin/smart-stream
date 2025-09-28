@@ -11,11 +11,24 @@ export declare class StreamService {
     getAllStreams(): Record<string, StreamStatus>;
     private generateStreamId;
     private buildFFmpegOptions;
+    private buildPlatformUrl;
+    private buildYouTubeUrl;
+    private buildTwitchUrl;
     private spawnFFmpegProcess;
     private buildFFmpegArgs;
     private setupProcessHandlers;
     private parseFFmpegProgress;
+    private setupStreamMonitoring;
     private waitForStreamStart;
+    testRtspConnection(rtspUrl: string): Promise<{
+        success: boolean;
+        output: string;
+        error?: string;
+    }>;
+    getFFmpegInfo(): {
+        path: string;
+        version: string;
+    };
     healthCheck(): Promise<boolean>;
 }
 //# sourceMappingURL=StreamService.d.ts.map

@@ -15,6 +15,7 @@ export declare class SmartStreamApp {
     private initializeServices;
     private setupRoutes;
     private setupErrorHandling;
+    private startAutostartCameras;
     start(port?: number): Promise<void>;
     stop(): Promise<void>;
 }

@@ -95,6 +95,26 @@ export const streamService = {
     return response.data.data;
   },
 
+  async startYouTubeStream(hostname: string, streamKey: string, config?: Partial<StartStreamRequest['config']>): Promise<StreamStatus> {
+    const request: StartStreamRequest = {
+      hostname,
+      platform: 'youtube',
+      streamKey,
+      config
+    };
+    return this.startStream(request);
+  },
+
+  async startTwitchStream(hostname: string, streamKey: string, config?: Partial<StartStreamRequest['config']>): Promise<StreamStatus> {
+    const request: StartStreamRequest = {
+      hostname,
+      platform: 'twitch', 
+      streamKey,
+      config
+    };
+    return this.startStream(request);
+  },
+
   async stopStream(streamId: string): Promise<void> {
     await api.delete(`/streams/${streamId}`);
   },

@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import debug from 'debug';
 import { DatabaseService } from '../services/DatabaseService';
 import { OnvifService } from '../services/OnvifService';
 import { validateBody, validateParams, commonSchemas } from '../middleware/validation';
@@ -13,20 +14,28 @@ import {
   ValidationError
 } from '@smart-stream/shared';
 
+const log = debug('smart-stream:cameras');
+
 // Validation schemas
 const addCameraSchema = z.object({
   hostname: commonSchemas.hostname,
   port: commonSchemas.port,
   username: commonSchemas.username,
   password: commonSchemas.password,
-  autostart: z.boolean().optional()
+  autostart: z.boolean().optional(),
+  youtubeStreamKey: z.string().optional(),
+  twitchStreamKey: z.string().optional(),
+  defaultPlatform: z.enum(['youtube', 'twitch', 'custom']).optional()
 });
 
 const updateCameraSchema = z.object({
   port: commonSchemas.port.optional(),
   username: commonSchemas.username.optional(),
   password: commonSchemas.password.optional(),
-  autostart: z.boolean().optional()
+  autostart: z.boolean().optional(),
+  youtubeStreamKey: z.string().optional(),
+  twitchStreamKey: z.string().optional(),
+  defaultPlatform: z.enum(['youtube', 'twitch', 'custom']).optional()
 });
 
 const hostnameParamSchema = z.object({
@@ -130,8 +139,11 @@ export function createCameraRouter(
         }
         const updates = req.body as UpdateCameraRequest;
 
-        // If credentials are being updated, test the connection
-        if (updates.username || updates.password || updates.port) {
+        // If connection-related credentials are being updated, test the connection
+        const connectionFieldsUpdated = updates.username || updates.password || updates.port;
+        log('Update request for camera %s:', hostname, { updates, connectionFieldsUpdated });
+        
+        if (connectionFieldsUpdated) {
           const existingCamera = await database.getCamera(hostname);
           if (!existingCamera) {
             throw new CameraNotFoundError(hostname);

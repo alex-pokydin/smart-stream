@@ -10,6 +10,9 @@ export interface CameraConfig {
   rtspUrl?: string;
   snapshotUrl?: string;
   stats?: StreamStats;
+  youtubeStreamKey?: string;
+  twitchStreamKey?: string;
+  defaultPlatform?: 'youtube' | 'twitch' | 'custom';
 }
 
 

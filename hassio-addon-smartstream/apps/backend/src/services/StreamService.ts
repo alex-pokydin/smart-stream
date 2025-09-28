@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import debug from 'debug';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { DatabaseService } from './DatabaseService';
 import { 
   StreamConfig, 
@@ -21,6 +22,10 @@ export class StreamService {
       log('Initializing Stream service...');
       this.database = database;
       
+      // Log FFmpeg information
+      log('FFmpeg binary path: %s', ffmpegInstaller.path);
+      log('FFmpeg version: %s', ffmpegInstaller.version);
+      
       log('Stream service initialized successfully');
     } catch (error) {
       log('Error initializing Stream service:', error);
@@ -32,9 +37,15 @@ export class StreamService {
     const streamId = this.generateStreamId();
     
     try {
-      log('Starting stream %s with config:', streamId, config);
+      const platform = config.platform?.type || 'custom';
+      log('🎬 Starting %s stream %s: %s → %s', 
+          platform, streamId, 
+          config.inputUrl.replace(/\/\/.*@/, '//[CREDENTIALS]@'), 
+          config.platform?.type === 'youtube' ? 'YouTube' : 
+          config.platform?.type === 'twitch' ? 'Twitch' : 'Custom');
       
       const ffmpegOptions = this.buildFFmpegOptions(config);
+      
       const process = this.spawnFFmpegProcess(ffmpegOptions);
       
       const stream: ActiveStream = {
@@ -55,13 +66,27 @@ export class StreamService {
 
       this.activeStreams.set(streamId, stream);
       this.setupProcessHandlers(stream);
+      this.setupStreamMonitoring(stream);
 
       // Wait a moment to see if the process starts successfully
       await this.waitForStreamStart(stream);
 
-      return this.getStreamStatus(streamId);
+      const status = this.getStreamStatus(streamId);
+      log('Stream %s startup completed, returning status: %s', streamId, status.status);
+      return status;
     } catch (error) {
       log('Error starting stream %s:', streamId, error);
+      
+      // Clean up the failed stream if it was added to the map
+      if (this.activeStreams.has(streamId)) {
+        const failedStream = this.activeStreams.get(streamId);
+        if (failedStream?.process && !failedStream.process.killed) {
+          log('Cleaning up failed stream %s process', streamId);
+          failedStream.process.kill('SIGTERM');
+        }
+        this.activeStreams.delete(streamId);
+      }
+      
       throw new StreamError(`Failed to start stream: ${(error as Error).message}`, streamId, error as Error);
     }
   }
@@ -91,6 +116,12 @@ export class StreamService {
       }
 
       stream.endTime = new Date();
+      
+      // Clean up monitoring interval
+      if ((stream as any).monitorInterval) {
+        clearInterval((stream as any).monitorInterval);
+      }
+      
       this.activeStreams.delete(streamId);
       
       log('Stream %s stopped successfully', streamId);
@@ -157,39 +188,83 @@ export class StreamService {
   private buildFFmpegOptions(config: StreamConfig): FFmpegOptions {
     const options: FFmpegOptions = {
       input: config.inputUrl,
-      videoCodec: 'libx264',
-      audioCodec: 'aac',
-      preset: 'veryfast',
-      crf: 23,
-      maxrate: config.bitrate || '2M',
-      bufsize: '4M',
-      keyint: 60,
-      framerate: config.fps || 30,
-      resolution: config.resolution || '1920x1080',
+      // Note: video and audio codecs are now handled in buildFFmpegArgs()
+      // Using copy mode for video and AAC for audio with null source
       customArgs: [
-        '-f', 'flv',
+        // RTMP reconnection settings for better reliability
         '-reconnect', '1',
-        '-reconnect_streamed', '1',
+        '-reconnect_streamed', '1', 
         '-reconnect_delay_max', '5'
       ]
     };
     
-    // Only set output if it's provided
-    if (config.outputUrl) {
-      options.output = config.outputUrl;
+    // Build output URL based on platform configuration
+    let outputUrl = config.outputUrl;
+    
+    // Handle platform-specific streaming
+    if (config.platform?.type) {
+      outputUrl = this.buildPlatformUrl(config.platform);
+    } else if (config.youtubeStreamKey) {
+      // Legacy support for direct YouTube stream key
+      outputUrl = this.buildYouTubeUrl(config.youtubeStreamKey);
+    }
+    
+    if (outputUrl) {
+      options.output = outputUrl;
     }
     
     return options;
   }
 
+  private buildPlatformUrl(platform: { type: string; streamKey?: string; serverUrl?: string }): string {
+    log('Building platform URL - type: %s, hasStreamKey: %s, hasServerUrl: %s', 
+        platform.type, !!platform.streamKey, !!platform.serverUrl);
+    
+    switch (platform.type) {
+      case 'youtube':
+        return this.buildYouTubeUrl(platform.streamKey || '');
+      case 'twitch':
+        return this.buildTwitchUrl(platform.streamKey || '');
+      case 'custom':
+        if (platform.serverUrl && platform.streamKey) {
+          const customUrl = `${platform.serverUrl}/${platform.streamKey}`;
+          log('Built custom RTMP URL: %s', customUrl);
+          return customUrl;
+        }
+        log('Custom platform missing serverUrl or streamKey, using serverUrl only: %s', platform.serverUrl);
+        return platform.serverUrl || '';
+      default:
+        log('Unsupported platform type: %s', platform.type);
+        throw new StreamError(`Unsupported platform type: ${platform.type}`);
+    }
+  }
+
+  private buildYouTubeUrl(streamKey: string): string {
+    if (!streamKey) {
+      throw new StreamError('YouTube stream key is required');
+    }
+    return `rtmp://a.rtmp.youtube.com/live2/${streamKey}`;
+  }
+
+  private buildTwitchUrl(streamKey: string): string {
+    if (!streamKey) {
+      throw new StreamError('Twitch stream key is required');
+    }
+    return `rtmp://live.twitch.tv/app/${streamKey}`;
+  }
+
   private spawnFFmpegProcess(options: FFmpegOptions): ChildProcess {
     const args = this.buildFFmpegArgs(options);
     
-    log('Spawning FFmpeg with args:', args);
+    log('🚀 Starting FFmpeg: %s → %s', 
+        options.input.replace(/\/\/.*@/, '//[CREDENTIALS]@'), 
+        options.output?.substring(0, 50) + '...' || 'stdout');
     
-    const process = spawn('ffmpeg', args, {
+    const process = spawn(ffmpegInstaller.path, args, {
       stdio: ['pipe', 'pipe', 'pipe']
     });
+
+    log('FFmpeg process created with PID: %s', process.pid);
 
     return process;
   }
@@ -197,54 +272,74 @@ export class StreamService {
   private buildFFmpegArgs(options: FFmpegOptions): string[] {
     const args: string[] = [];
 
-    // Input options
+    // Always overwrite output files
+    args.push('-y');
+
+    // Add progress and verbosity options for better monitoring
+    args.push('-loglevel', 'debug');
+    args.push('-progress', 'pipe:2');
+    
+    // RTSP specific options for better reliability
+    args.push('-rtsp_transport', 'tcp');  // Force TCP for more reliable connection
+    args.push('-fflags', '+genpts');      // Generate presentation timestamps
+    args.push('-re');                     // Read input at native frame rate (critical for live streaming)
+    args.push('-stimeout', '10000000');   // 10 second connection timeout (microseconds)
+    args.push('-analyzeduration', '5000000');  // 5 second analysis timeout
+    args.push('-probesize', '1000000');   // Limit probe size to speed up detection
+
+    // Input stream
     args.push('-i', options.input);
 
-    // Video codec options
-    if (options.videoCodec) {
-      args.push('-c:v', options.videoCodec);
+    // Add null audio source for video-only streams (YouTube requirement)
+    args.push('-f', 'lavfi');
+    args.push('-i', 'anullsrc');
+
+    // Use wallclock timestamps for better sync
+    args.push('-use_wallclock_as_timestamps', '1');
+
+    // Video: copy without transcoding (much faster and preserves quality)
+    args.push('-c:v', 'copy');
+
+    // Audio: encode null audio to AAC (required by YouTube)
+    args.push('-c:a', 'aac');
+
+    // Use single thread for more predictable performance
+    args.push('-threads', '1');
+
+    // Output format: FLV for RTMP streaming
+    args.push('-f', 'flv');
+
+    // Add any remaining custom arguments (filtered to avoid conflicts)
+    if (options.customArgs && options.customArgs.length > 0) {
+      // Filter out args we've already set to avoid conflicts
+      const predefinedArgs = ['-y', '-loglevel', '-progress', '-rtsp_transport', 
+                             '-fflags', '-re', '-stimeout', '-analyzeduration', 
+                             '-probesize', '-f', '-i', '-use_wallclock_as_timestamps',
+                             '-c:v', '-c:a', '-threads'];
+      
+      const filteredCustomArgs: string[] = [];
+      for (let i = 0; i < options.customArgs.length; i++) {
+        const arg = options.customArgs[i];
+        if (arg && !predefinedArgs.includes(arg)) {
+          filteredCustomArgs.push(arg);
+          // If this arg has a value, include it too
+          const nextArg = options.customArgs[i + 1];
+          if (nextArg && i + 1 < options.customArgs.length && !nextArg.startsWith('-')) {
+            i++; // Skip to the value
+            filteredCustomArgs.push(nextArg);
+          }
+        } else if (arg) {
+          // Skip this predefined arg and its value if present
+          const nextArg = options.customArgs[i + 1];
+          if (nextArg && i + 1 < options.customArgs.length && !nextArg.startsWith('-')) {
+            i++; // Skip the value too
+          }
+        }
+      }
+      args.push(...filteredCustomArgs);
     }
 
-    // Audio codec options
-    if (options.audioCodec) {
-      args.push('-c:a', options.audioCodec);
-    }
-
-    // Quality options
-    if (options.preset) {
-      args.push('-preset', options.preset);
-    }
-    if (options.crf) {
-      args.push('-crf', options.crf.toString());
-    }
-    if (options.maxrate) {
-      args.push('-maxrate', options.maxrate);
-    }
-    if (options.bufsize) {
-      args.push('-bufsize', options.bufsize);
-    }
-
-    // Frame rate
-    if (options.framerate) {
-      args.push('-r', options.framerate.toString());
-    }
-
-    // Resolution
-    if (options.resolution) {
-      args.push('-s', options.resolution);
-    }
-
-    // Key frame interval
-    if (options.keyint) {
-      args.push('-g', options.keyint.toString());
-    }
-
-    // Custom arguments
-    if (options.customArgs) {
-      args.push(...options.customArgs);
-    }
-
-    // Output
+    // Output destination
     if (options.output) {
       args.push(options.output);
     }
@@ -256,39 +351,78 @@ export class StreamService {
     const { process, id } = stream;
 
     process.on('spawn', () => {
-      log('Stream %s process spawned', id);
+      log('Stream %s process spawned successfully', id);
       stream.status = 'running';
     });
 
     process.on('error', (error) => {
-      log('Stream %s process error:', id, error);
+      log('Stream %s process spawn error:', id, error);
       stream.status = 'error';
-      stream.errorMessage = error.message;
+      stream.errorMessage = `Process spawn error: ${error.message}`;
       stream.endTime = new Date();
     });
 
     process.on('exit', (code, signal) => {
-      log('Stream %s process exited with code %s, signal %s', id, code, signal);
+      log('Stream %s process exited - code: %s, signal: %s', id, code, signal);
+      
+      // Clean up monitoring interval
+      if ((stream as any).monitorInterval) {
+        clearInterval((stream as any).monitorInterval);
+      }
       
       if (stream.status !== 'stopping') {
         stream.status = 'error';
         stream.errorMessage = `Process exited unexpectedly (code: ${code}, signal: ${signal})`;
+        log('Stream %s marked as error due to unexpected exit', id);
       } else {
         stream.status = 'idle';
+        log('Stream %s stopped gracefully', id);
       }
       
       stream.endTime = new Date();
     });
 
-    // Parse FFmpeg stderr for progress information
+    // Parse FFmpeg stderr for progress information and errors
     process.stderr?.on('data', (data) => {
       const output = data.toString();
       this.parseFFmpegProgress(stream, output);
+      
+      // Only log important events and errors (filter out routine debug output)
+      if (output.includes('Connection refused') || output.includes('Network is unreachable')) {
+        log('Stream %s NETWORK ERROR: %s', id, output.trim());
+      }
+      else if (output.includes('Invalid data found') || output.includes('could not find codec')) {
+        log('Stream %s CODEC/FORMAT ERROR: %s', id, output.trim());
+      }
+      else if (output.includes('Permission denied') || output.includes('No such file')) {
+        log('Stream %s FILE/PERMISSION ERROR: %s', id, output.trim());
+      }
+      else if (output.includes('timeout') || output.includes('timed out')) {
+        log('Stream %s TIMEOUT ERROR: %s', id, output.trim());
+      }
+      else if (output.includes('RTSP') && output.includes('failed')) {
+        log('Stream %s RTSP ERROR: %s', id, output.trim());
+      }
+      else if (output.includes('Input #0')) {
+        log('Stream %s ✅ Input source detected', id);
+      }
+      else if (output.includes('Output #0')) {
+        log('Stream %s ✅ Output started', id);
+      }
+      else if (output.includes('Stream mapping:')) {
+        log('Stream %s ✅ Stream mapping configured', id);
+      }
+      // Log other significant errors
+      else if (output.includes('error') || output.includes('Error') || output.includes('failed') || output.includes('Failed')) {
+        log('Stream %s ERROR: %s', id, output.trim());
+      }
     });
 
     process.stdout?.on('data', (data) => {
-      // Handle stdout if needed
-      log('Stream %s stdout:', id, data.toString().trim());
+      const output = data.toString().trim();
+      if (output) {
+        log('Stream %s stdout:', id, output);
+      }
     });
   }
 
@@ -335,19 +469,69 @@ export class StreamService {
     }
   }
 
+  private setupStreamMonitoring(stream: ActiveStream): void {
+    let lastProgressTime = Date.now();
+    let lastLogTime = Date.now();
+    
+    const monitorInterval = setInterval(() => {
+      if (stream.status !== 'running' || stream.process.killed) {
+        clearInterval(monitorInterval);
+        return;
+      }
+      
+      const currentTime = Date.now();
+      const timeSinceLastProgress = currentTime - lastProgressTime;
+      const timeSinceLastLog = currentTime - lastLogTime;
+      
+      // Check if we've had any progress updates
+      if (stream.stats.fps > 0 || stream.stats.size !== '0B') {
+        lastProgressTime = currentTime;
+      }
+      
+      // Only log progress every 2 minutes when streaming is working fine
+      if (timeSinceLastProgress > 30000) {
+        log('Stream %s ⚠️  No progress for %dms. Status: %s, FPS: %s, Size: %s', 
+            stream.id, timeSinceLastProgress, stream.status, stream.stats.fps, stream.stats.size);
+        lastLogTime = currentTime;
+        
+        // If no progress for 2 minutes, log a warning
+        if (timeSinceLastProgress > 120000) {
+          log('Stream %s 🚨 WARNING - No FFmpeg progress for over 2 minutes, stream may be stalled', stream.id);
+        }
+      } else if (timeSinceLastLog > 120000 && stream.stats.fps > 0) {
+        // Log progress every 2 minutes when everything is working
+        log('Stream %s ✅ Streaming: %s FPS, %s, %s speed', 
+            stream.id, stream.stats.fps, stream.stats.size, stream.stats.speed);
+        lastLogTime = currentTime;
+      }
+    }, 30000); // Check every 30 seconds
+    
+    // Store the interval so we can clean it up
+    (stream as any).monitorInterval = monitorInterval;
+  }
+
   private async waitForStreamStart(stream: ActiveStream): Promise<void> {
     return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+      log('Waiting for stream %s to start...', stream.id);
+      
       const timeout = setTimeout(() => {
         if (stream.status === 'starting') {
-          reject(new Error('Stream start timeout'));
+          log('Stream %s start timeout after 10 seconds', stream.id);
+          reject(new Error('Stream start timeout after 10 seconds'));
         }
       }, 10000); // 10 second timeout
 
       const checkStatus = () => {
+        const elapsed = Date.now() - startTime;
+        log('Stream %s status check - status: %s, elapsed: %dms', stream.id, stream.status, elapsed);
+        
         if (stream.status === 'running') {
+          log('Stream %s started successfully after %dms', stream.id, elapsed);
           clearTimeout(timeout);
           resolve();
         } else if (stream.status === 'error') {
+          log('Stream %s failed to start after %dms - error: %s', stream.id, elapsed, stream.errorMessage);
           clearTimeout(timeout);
           reject(new Error(stream.errorMessage || 'Stream failed to start'));
         } else {
@@ -359,38 +543,110 @@ export class StreamService {
     });
   }
 
+  // Test RTSP connectivity independently
+  public async testRtspConnection(rtspUrl: string): Promise<{ success: boolean; output: string; error?: string }> {
+    return new Promise((resolve) => {
+      log('Testing RTSP connectivity to: %s', rtspUrl.replace(/\/\/.*@/, '//[CREDENTIALS]@'));
+      
+      const args = [
+        '-loglevel', 'debug',
+        '-rtsp_transport', 'tcp',
+        '-stimeout', '10000000',  // 10 second timeout
+        '-analyzeduration', '1000000',  // 1 second analysis
+        '-probesize', '500000',   // Small probe
+        '-i', rtspUrl,
+        '-f', 'null',  // Null output - just test the input
+        '-t', '5',     // Test for 5 seconds max
+        '-'
+      ];
+      
+      const process = spawn(ffmpegInstaller.path, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      process.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      process.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      const timeout = setTimeout(() => {
+        process.kill('SIGTERM');
+        resolve({
+          success: false,
+          output: stderr,
+          error: 'RTSP test timeout after 15 seconds'
+        });
+      }, 15000);
+      
+      process.on('exit', (code, signal) => {
+        clearTimeout(timeout);
+        const success = code === 0 || stderr.includes('Input #0');
+        
+        log('RTSP test completed - code: %s, signal: %s, success: %s', code, signal, success);
+        
+        const result: { success: boolean; output: string; error?: string } = {
+          success,
+          output: stderr
+        };
+        
+        if (!success) {
+          result.error = `FFmpeg exit code: ${code}`;
+        }
+        
+        resolve(result);
+      });
+      
+      process.on('error', (error) => {
+        clearTimeout(timeout);
+        resolve({
+          success: false,
+          output: stderr,
+          error: `Process error: ${error.message}`
+        });
+      });
+    });
+  }
+
+  // Get FFmpeg information
+  public getFFmpegInfo(): { path: string; version: string } {
+    return {
+      path: ffmpegInstaller.path,
+      version: ffmpegInstaller.version
+    };
+  }
+
   // Health check
   public async healthCheck(): Promise<boolean> {
     try {
-      // In development mode, consider the service healthy if it's initialized
-      // In production (Home Assistant), check if FFmpeg is available
-      const isDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
+      // Check if FFmpeg is available using the npm-installed binary
+      log('Health check using FFmpeg path: %s', ffmpegInstaller.path);
       
-      if (isDevelopment) {
-        // For development, just check if the service is initialized
-        return this.database !== null;
-      }
-      
-      // For production, check if FFmpeg is available
-      const testProcess = spawn('ffmpeg', ['-version'], { stdio: 'pipe' });
+      const testProcess = spawn(ffmpegInstaller.path, ['-version'], { stdio: 'pipe' });
       
       return new Promise((resolve) => {
         testProcess.on('exit', (code) => {
+          log('FFmpeg health check exit code: %d', code);
           resolve(code === 0);
         });
         
-        testProcess.on('error', () => {
-          log('FFmpeg not available for streaming service');
+        testProcess.on('error', (error) => {
+          log('FFmpeg health check error:', error);
           resolve(false);
         });
         
         // Timeout after 5 seconds
         setTimeout(() => {
           testProcess.kill();
+          log('FFmpeg health check timeout');
           resolve(false);
         }, 5000);
       });
-    } catch {
+    } catch (error) {
+      log('FFmpeg health check exception:', error);
       return false;
     }
   }

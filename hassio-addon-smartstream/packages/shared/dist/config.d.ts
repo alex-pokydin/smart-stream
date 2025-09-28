@@ -24,6 +24,18 @@ export interface StreamingConfig {
     outputPath?: string;
     maxConcurrentStreams?: number;
     ffmpegPath?: string;
+    youtube?: YouTubeConfig;
+    twitch?: TwitchConfig;
+}
+export interface YouTubeConfig {
+    enabled?: boolean;
+    defaultStreamKey?: string;
+    rtmpUrl?: string;
+}
+export interface TwitchConfig {
+    enabled?: boolean;
+    defaultStreamKey?: string;
+    rtmpUrl?: string;
 }
 export interface HomeAssistantConfig {
     supervisor?: {

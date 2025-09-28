@@ -5,6 +5,14 @@ export interface StreamConfig {
   fps?: number;
   resolution?: string;
   bitrate?: string;
+  platform?: StreamPlatform;
+  youtubeStreamKey?: string;
+}
+
+export interface StreamPlatform {
+  type: 'youtube' | 'twitch' | 'custom';
+  streamKey?: string;
+  serverUrl?: string;
 }
 
 export interface StreamStatus {

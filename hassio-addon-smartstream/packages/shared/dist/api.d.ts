@@ -6,6 +6,9 @@ export interface AddCameraRequest {
     username: string;
     password: string;
     autostart?: boolean;
+    youtubeStreamKey?: string;
+    twitchStreamKey?: string;
+    defaultPlatform?: 'youtube' | 'twitch' | 'custom';
 }
 export interface UpdateCameraRequest extends Partial<AddCameraRequest> {
     hostname: string;
@@ -13,6 +16,8 @@ export interface UpdateCameraRequest extends Partial<AddCameraRequest> {
 export interface StartStreamRequest {
     hostname: string;
     config?: Partial<StreamConfig>;
+    platform?: 'youtube' | 'twitch' | 'custom';
+    streamKey?: string;
 }
 export interface ApiResponse<T = unknown> {
     success: boolean;

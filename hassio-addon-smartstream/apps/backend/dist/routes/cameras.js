@@ -1,23 +1,34 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createCameraRouter = createCameraRouter;
 const express_1 = require("express");
 const zod_1 = require("zod");
+const debug_1 = __importDefault(require("debug"));
 const validation_1 = require("../middleware/validation");
 const shared_1 = require("@smart-stream/shared");
+const log = (0, debug_1.default)('smart-stream:cameras');
 // Validation schemas
 const addCameraSchema = zod_1.z.object({
     hostname: validation_1.commonSchemas.hostname,
     port: validation_1.commonSchemas.port,
     username: validation_1.commonSchemas.username,
     password: validation_1.commonSchemas.password,
-    autostart: zod_1.z.boolean().optional()
+    autostart: zod_1.z.boolean().optional(),
+    youtubeStreamKey: zod_1.z.string().optional(),
+    twitchStreamKey: zod_1.z.string().optional(),
+    defaultPlatform: zod_1.z.enum(['youtube', 'twitch', 'custom']).optional()
 });
 const updateCameraSchema = zod_1.z.object({
     port: validation_1.commonSchemas.port.optional(),
     username: validation_1.commonSchemas.username.optional(),
     password: validation_1.commonSchemas.password.optional(),
-    autostart: zod_1.z.boolean().optional()
+    autostart: zod_1.z.boolean().optional(),
+    youtubeStreamKey: zod_1.z.string().optional(),
+    twitchStreamKey: zod_1.z.string().optional(),
+    defaultPlatform: zod_1.z.enum(['youtube', 'twitch', 'custom']).optional()
 });
 const hostnameParamSchema = zod_1.z.object({
     hostname: validation_1.commonSchemas.hostname
@@ -93,8 +104,10 @@ function createCameraRouter(database, onvif) {
                 throw new shared_1.ValidationError('Hostname parameter is required', 'hostname', hostname);
             }
             const updates = req.body;
-            // If credentials are being updated, test the connection
-            if (updates.username || updates.password || updates.port) {
+            // If connection-related credentials are being updated, test the connection
+            const connectionFieldsUpdated = updates.username || updates.password || updates.port;
+            log('Update request for camera %s:', hostname, { updates, connectionFieldsUpdated });
+            if (connectionFieldsUpdated) {
                 const existingCamera = await database.getCamera(hostname);
                 if (!existingCamera) {
                     throw new shared_1.CameraNotFoundError(hostname);

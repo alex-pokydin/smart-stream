@@ -55,6 +55,9 @@ export class SmartStreamApp {
     // Setup error handling
     this.setupErrorHandling();
     
+    // Start autostart cameras
+    await this.startAutostartCameras();
+    
     log('Application initialized successfully');
   }
 
@@ -111,7 +114,7 @@ export class SmartStreamApp {
     // API routes
     this.app.use('/api/v1', createApiRouter());
     this.app.use('/api/v1/cameras', createCameraRouter(this.database, this.onvif));
-    this.app.use('/api/v1/streams', createStreamRouter(this.streaming));
+    this.app.use('/api/v1/streams', createStreamRouter(this.streaming, this.database, this.onvif));
     
     // Legacy compatibility routes
     this.app.use('/api', createApiRouter()); // Legacy /api support
@@ -138,6 +141,101 @@ export class SmartStreamApp {
 
   private setupErrorHandling(): void {
     this.app.use(errorHandler);
+  }
+
+  private async startAutostartCameras(): Promise<void> {
+    try {
+      log('🔍 Checking for cameras with autostart enabled...');
+      
+      const cameras = await this.database.getCameras();
+      const autostartCameras = Object.values(cameras).filter(camera => camera.autostart === true);
+      
+      if (autostartCameras.length === 0) {
+        log('No cameras with autostart enabled found');
+        return;
+      }
+      
+      log('🚀 Found %d camera(s) with autostart enabled', autostartCameras.length);
+      
+      // Start streams for each autostart camera
+      for (const camera of autostartCameras) {
+        try {
+          log('🎬 Starting autostart stream for camera: %s', camera.hostname);
+          
+          // Determine the platform to use
+          let platform = camera.defaultPlatform;
+          let streamKey = '';
+          
+          if (platform === 'youtube' && camera.youtubeStreamKey) {
+            streamKey = camera.youtubeStreamKey;
+          } else if (platform === 'twitch' && camera.twitchStreamKey) {
+            streamKey = camera.twitchStreamKey;
+          } else {
+            // Default to YouTube if no platform specified but YouTube key exists
+            if (camera.youtubeStreamKey) {
+              platform = 'youtube';
+              streamKey = camera.youtubeStreamKey;
+            } else if (camera.twitchStreamKey) {
+              platform = 'twitch';
+              streamKey = camera.twitchStreamKey;
+            } else {
+              log('⚠️ Camera %s has autostart enabled but no valid stream key/platform configured', camera.hostname);
+              continue;
+            }
+          }
+          
+          // Get real RTSP URL from ONVIF
+          let inputUrl: string;
+          try {
+            const onvifCamera = await this.onvif.getCamera({
+              hostname: camera.hostname,
+              port: typeof camera.port === 'string' ? parseInt(camera.port) : camera.port,
+              username: camera.username,
+              password: camera.password
+            });
+            
+            const streamUris = await this.onvif.getCameraStreams(onvifCamera);
+            
+            if (streamUris && streamUris.length > 0 && streamUris[0]?.uri) {
+              inputUrl = streamUris[0].uri;
+              log('✅ Got RTSP URL from ONVIF for %s', camera.hostname);
+            } else {
+              throw new Error('No stream URIs returned from camera');
+            }
+          } catch (onvifError) {
+            log('⚠️ Failed to get RTSP URL via ONVIF for %s, using constructed URL: %s', 
+                camera.hostname, (onvifError as Error).message);
+            inputUrl = `rtsp://${encodeURIComponent(camera.username)}:${encodeURIComponent(camera.password)}@${camera.hostname}:${camera.port}/stream`;
+          }
+          
+          // Start the stream
+          const streamConfig = {
+            inputUrl,
+            quality: 'medium',
+            fps: 30,
+            resolution: '1920x1080',
+            bitrate: '2M',
+            platform: {
+              type: platform,
+              streamKey: streamKey
+            }
+          };
+          
+          const streamStatus = await this.streaming.startStream(streamConfig);
+          log('✅ Autostart stream started for camera %s: %s (ID: %s)', 
+              camera.hostname, platform, streamStatus.id);
+              
+        } catch (error) {
+          log('❌ Failed to start autostart stream for camera %s: %s', 
+              camera.hostname, (error as Error).message);
+        }
+      }
+      
+      log('🎉 Autostart process completed');
+      
+    } catch (error) {
+      log('❌ Error during autostart process:', error);
+    }
   }
 
   public async start(port: number = 3000): Promise<void> {

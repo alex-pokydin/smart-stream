@@ -23,11 +23,12 @@ Smart Stream is a **Home Assistant Add-on** for streaming IP cameras to platform
 
 ### **Key Dependencies**
 - **Validation**: Zod for runtime type checking and API validation
-- **UI**: Tailwind CSS with custom component classes
+- **UI**: Tailwind CSS with custom component classes + React Hot Toast for notifications
 - **Icons**: Lucide React for consistent iconography
 - **HTTP Client**: Axios with interceptors for API communication
-- **Camera Protocol**: ONVIF for IP camera discovery and control
-- **Streaming**: FFmpeg for video processing and streaming
+- **Camera Protocol**: ONVIF for IP camera discovery, stream URI detection, and control
+- **Streaming**: FFmpeg via @ffmpeg-installer/ffmpeg for cross-platform video processing
+- **Logging**: Debug module for structured, conditional logging across services
 
 ## Development Principles
 
@@ -92,15 +93,19 @@ pnpm --filter @smart-stream/backend type-check
 - Data persistence in `/data` directory
 
 ### **Camera Support**
-- ONVIF protocol for IP camera discovery and configuration
-- Support for RTSP streaming protocols
-- Camera credential management with secure storage
-- Auto-discovery of cameras on local network
+- **ONVIF Integration**: Camera discovery, stream URI detection, and connection testing
+- **RTSP Protocols**: Dynamic URL construction with TCP transport for reliability
+- **Credential Management**: Secure storage and authenticated RTSP connections
+- **Auto-discovery**: Network scanning for ONVIF-enabled cameras
+- **Autostart Configuration**: Per-camera automatic stream startup on app launch
 
 ### **Streaming Capabilities**
-- FFmpeg-based video processing and streaming
-- Real-time stream monitoring and statistics
-- Graceful handling of stream failures and reconnection
+- **Platform Support**: YouTube Live, Twitch, and custom RTMP endpoints
+- **Video Processing**: FFmpeg copy mode for zero-transcoding performance
+- **RTSP Discovery**: Dynamic RTSP URL detection via ONVIF for camera compatibility
+- **Autostart Streams**: Automatic stream initialization for configured cameras
+- **Real-time Monitoring**: Live stream statistics, progress tracking, and error detection
+- **Credential Security**: Safe handling of camera credentials in RTSP URLs
 
 ## File Naming & Structure Conventions
 
@@ -149,16 +154,37 @@ pnpm --filter @smart-stream/backend type-check
 - Incremental builds with workspace dependencies
 
 ### **Runtime Performance**
-- React.memo for component optimization where needed
-- Efficient API polling with proper cleanup
-- Stream monitoring without excessive resource usage
-- Database operations optimized for small datasets
+- **Zero-Transcoding**: FFmpeg copy mode preserves quality and minimizes CPU usage
+- **Optimized Logging**: Structured debug logging with configurable verbosity levels
+- **Stream Efficiency**: Real-time monitoring with minimal overhead
+- **React Optimization**: Component memoization and efficient state management
+- **Database**: Lightweight JSON-based storage optimized for camera configurations
 
 ---
 
+## Key Technical Implementation Notes
+
+### **FFmpeg Integration**
+- Use @ffmpeg-installer/ffmpeg for cross-platform binary distribution
+- Prefer copy mode (-c:v copy) over transcoding for performance
+- Implement null audio source (-f lavfi -i anullsrc) for video-only streams
+- Use structured args with proper escaping for RTSP credentials
+
+### **ONVIF Best Practices**
+- Use getStreamUri() callback pattern for real camera URL discovery
+- Implement fallback to constructed RTSP URLs when ONVIF fails
+- Test connections before adding cameras to prevent configuration errors
+
+### **Streaming Architecture**
+- Autostart cameras on application initialization after services are ready
+- Support multiple platforms (YouTube/Twitch) with per-camera configuration
+- Implement comprehensive error detection and recovery mechanisms
+- Use debug module for clean, conditional logging across all services
+
 ## Notes for AI Assistance
-- Prefer TypeScript solutions with proper typing
-- Follow established patterns in existing codebase
+- Prioritize TypeScript solutions with strict typing
+- Follow established service patterns and error handling
 - Use workspace packages for shared functionality
-- Maintain consistency with Tailwind utility classes
-- Consider Home Assistant Add-on constraints in suggestions
+- Maintain Tailwind utility class consistency
+- Consider Home Assistant Add-on deployment constraints
+- Test FFmpeg commands thoroughly across different camera types
