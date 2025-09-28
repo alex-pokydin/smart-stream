@@ -30,6 +30,31 @@ export LOG_DIR="/share/smart-stream/logs"
 mkdir -p "$DATA_DIR"
 mkdir -p "$LOG_DIR"
 
+# Configure DNS for better connectivity
+bashio::log.info "Configuring DNS for network connectivity..."
+
+# Add Google DNS and Cloudflare DNS as fallbacks
+if ! grep -q "8.8.8.8" /etc/resolv.conf; then
+    echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+fi
+if ! grep -q "1.1.1.1" /etc/resolv.conf; then
+    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+fi
+
+# Test DNS resolution for critical services
+bashio::log.info "Testing DNS resolution..."
+if nslookup google.com > /dev/null 2>&1; then
+    bashio::log.info "✅ DNS resolution working"
+else
+    bashio::log.warning "⚠️ DNS resolution issues detected"
+fi
+
+if nslookup a.rtmp.youtube.com > /dev/null 2>&1; then
+    bashio::log.info "✅ YouTube RTMP DNS resolution working"
+else
+    bashio::log.warning "⚠️ YouTube RTMP DNS resolution failed - streaming may not work"
+fi
+
 # Change to app directory
 cd /app
 

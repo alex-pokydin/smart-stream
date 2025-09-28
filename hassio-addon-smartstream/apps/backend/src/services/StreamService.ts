@@ -77,6 +77,21 @@ export class StreamService {
     } catch (error) {
       log('Error starting stream %s:', streamId, error);
       
+      // Check if this might be a network connectivity issue
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('Name or service not known') || 
+          errorMessage.includes('Network is unreachable') ||
+          errorMessage.includes('Connection refused')) {
+        log('Network connectivity issue detected for stream %s, running diagnostics...', streamId);
+        
+        // Run network diagnostics in the background (don't await to avoid blocking)
+        this.testNetworkConnectivity().then(result => {
+          log('Network diagnostics for stream %s:', streamId, result);
+        }).catch(diagError => {
+          log('Network diagnostics failed for stream %s:', streamId, diagError);
+        });
+      }
+      
       // Clean up the failed stream if it was added to the map
       if (this.activeStreams.has(streamId)) {
         const failedStream = this.activeStreams.get(streamId);
@@ -87,7 +102,17 @@ export class StreamService {
         this.activeStreams.delete(streamId);
       }
       
-      throw new StreamError(`Failed to start stream: ${(error as Error).message}`, streamId, error as Error);
+      // Provide more helpful error messages for common issues
+      let enhancedMessage = `Failed to start stream: ${errorMessage}`;
+      if (errorMessage.includes('Name or service not known')) {
+        enhancedMessage += '. This appears to be a DNS resolution issue. Please check your network connectivity and DNS settings.';
+      } else if (errorMessage.includes('Network is unreachable')) {
+        enhancedMessage += '. This appears to be a network connectivity issue. Please check your internet connection.';
+      } else if (errorMessage.includes('Connection refused')) {
+        enhancedMessage += '. The streaming server is refusing connections. Please verify your stream key and server settings.';
+      }
+      
+      throw new StreamError(enhancedMessage, streamId, error as Error);
     }
   }
 
@@ -243,7 +268,16 @@ export class StreamService {
     if (!streamKey) {
       throw new StreamError('YouTube stream key is required');
     }
-    return `rtmp://a.rtmp.youtube.com/live2/${streamKey}`;
+    // Use multiple YouTube RTMP endpoints for better reliability
+    const rtmpEndpoints = [
+      'a.rtmp.youtube.com',
+      'b.rtmp.youtube.com', 
+      'c.rtmp.youtube.com',
+      'd.rtmp.youtube.com'
+    ];
+    
+    // For now, use the first endpoint but we could implement round-robin or failover
+    return `rtmp://${rtmpEndpoints[0]}/live2/${streamKey}`;
   }
 
   private buildTwitchUrl(streamKey: string): string {
@@ -617,6 +651,100 @@ export class StreamService {
       path: ffmpegInstaller.path,
       version: ffmpegInstaller.version
     };
+  }
+
+  // Network connectivity test
+  public async testNetworkConnectivity(): Promise<{ success: boolean; details: any }> {
+    const results: any = {};
+    
+    try {
+      // Test DNS resolution for YouTube RTMP server
+      log('Testing DNS resolution for YouTube RTMP servers...');
+      
+      const dns = require('dns').promises;
+      
+      // Test multiple YouTube RTMP endpoints
+      const rtmpEndpoints = [
+        'a.rtmp.youtube.com',
+        'b.rtmp.youtube.com', 
+        'c.rtmp.youtube.com',
+        'd.rtmp.youtube.com'
+      ];
+      
+      results.dns = {};
+      let anyDnsSuccess = false;
+      
+      for (const endpoint of rtmpEndpoints) {
+        try {
+          const addresses = await dns.lookup(endpoint);
+          results.dns[endpoint] = { success: true, address: addresses.address };
+          anyDnsSuccess = true;
+          log('DNS resolution successful for %s: %s', endpoint, addresses.address);
+        } catch (error) {
+          results.dns[endpoint] = { success: false, error: (error as Error).message };
+          log('DNS resolution failed for %s: %s', endpoint, (error as Error).message);
+        }
+      }
+      
+      // Test HTTP connectivity to Google (general internet test)
+      results.internet = await this.testHttpConnectivity('https://www.google.com');
+      
+      // Test general DNS with common providers
+      results.generalDns = {};
+      const dnsProviders = ['8.8.8.8', '1.1.1.1'];
+      for (const provider of dnsProviders) {
+        try {
+          const testDns = require('dns');
+          testDns.setServers([provider]);
+          const addresses = await dns.lookup('google.com');
+          results.generalDns[provider] = { success: true, address: addresses.address };
+        } catch (error) {
+          results.generalDns[provider] = { success: false, error: (error as Error).message };
+        }
+      }
+      
+      const overallSuccess = anyDnsSuccess && results.internet.success;
+      
+      log('Network connectivity test completed - success: %s', overallSuccess);
+      return { success: overallSuccess, details: results };
+      
+    } catch (error) {
+      log('Network connectivity test exception:', error);
+      return { 
+        success: false, 
+        details: { error: (error as Error).message, results } 
+      };
+    }
+  }
+  
+  private async testHttpConnectivity(url: string): Promise<{ success: boolean; error?: string; statusCode?: number }> {
+    return new Promise((resolve) => {
+      const protocol = url.startsWith('https') ? require('https') : require('http');
+      const urlObj = new URL(url);
+      
+      const options = {
+        hostname: urlObj.hostname,
+        port: urlObj.port || (url.startsWith('https') ? 443 : 80),
+        path: urlObj.pathname,
+        method: 'HEAD',
+        timeout: 5000
+      };
+      
+      const req = protocol.request(options, (res: any) => {
+        resolve({ success: res.statusCode < 400, statusCode: res.statusCode });
+      });
+      
+      req.on('error', (error: Error) => {
+        resolve({ success: false, error: error.message });
+      });
+      
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ success: false, error: 'Request timeout' });
+      });
+      
+      req.end();
+    });
   }
 
   // Health check

@@ -103,5 +103,24 @@ export function createHealthRouter(
     }
   });
 
+  router.get('/network', async (req: Request, res: Response) => {
+    try {
+      const networkTest = await streaming.testNetworkConnectivity();
+      res.status(networkTest.success ? 200 : 503).json({
+        service: 'network',
+        status: networkTest.success ? 'healthy' : 'unhealthy',
+        timestamp: new Date().toISOString(),
+        details: networkTest.details
+      });
+    } catch (error) {
+      res.status(503).json({
+        service: 'network',
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: (error as Error).message
+      });
+    }
+  });
+
   return router;
 }

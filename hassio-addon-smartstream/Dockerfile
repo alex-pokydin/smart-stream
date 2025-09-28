@@ -16,7 +16,14 @@ RUN apk update && apk add --no-cache \
     python3 \
     make \
     g++ \
+    bind-tools \
+    dnsutils \
     && npm install -g pnpm@8.15.9 --force
+
+# Configure DNS fallback servers for better resolution
+RUN echo "nameserver 8.8.8.8" >> /etc/resolv.conf && \
+    echo "nameserver 1.1.1.1" >> /etc/resolv.conf && \
+    echo "nameserver 208.67.222.222" >> /etc/resolv.conf
 
 # Set working directory
 WORKDIR /app
