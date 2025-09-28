@@ -2,7 +2,6 @@ ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:latest
 FROM $BUILD_FROM
 
 ENV LANG=C.UTF-8
-ENV NODE_ENV=production
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
@@ -27,12 +26,19 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/ ./packages/
 COPY apps/ ./apps/
 
-# Install dependencies and build
-RUN pnpm install --frozen-lockfile --shamefully-hoist \
-    && pnpm build \
-    && pnpm prune --production \
+# Install all dependencies (including devDependencies for build)
+RUN pnpm install --frozen-lockfile --shamefully-hoist
+
+# Build the project
+RUN pnpm build
+
+# Remove devDependencies and clean up
+RUN pnpm prune --production \
     && pnpm store prune \
     && npm cache clean --force
+
+# Set production environment
+ENV NODE_ENV=production
 
 # Copy startup script
 COPY run.sh /
