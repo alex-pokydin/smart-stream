@@ -10,12 +10,18 @@ set -e
 bashio::log.info "Starting Smart Stream..."
 
 # Read configuration from options
-export PORT=$(bashio::config 'port')
 export LOG_LEVEL=$(bashio::config 'log_level')
 export NODE_ENV="production"
 
+# For Home Assistant ingress, always use the port from ingress configuration
+# If running in HA addon mode, use the ingress port, otherwise use configured port
+if bashio::config.has_value 'port'; then
+    export PORT=$(bashio::config 'port')
+else
+    export PORT=3000
+fi
+
 # Default values if not configured
-export PORT=${PORT:-3000}
 export LOG_LEVEL=${LOG_LEVEL:-info}
 
 bashio::log.info "Configuration:"
@@ -36,7 +42,7 @@ bashio::log.info "Starting Smart Stream service on port ${PORT}..."
 
 # Start backend service in background
 export DEBUG="smart-stream:*"
-cd /app && node apps/backend/dist/app.js &
+cd /app && PORT=${PORT} node apps/backend/dist/app.js &
 BACKEND_PID=$!
 
 bashio::log.info "Backend started with PID ${BACKEND_PID}"
@@ -62,11 +68,16 @@ bashio::log.info "Frontend static files copied to backend public directory"
 shutdown() {
     bashio::log.info "Shutting down Smart Stream..."
     
+    # Create stop signal file
+    touch /tmp/stop_addon
+    
     if [ ! -z "$BACKEND_PID" ] && kill -0 $BACKEND_PID 2>/dev/null; then
         bashio::log.info "Stopping backend service..."
-        kill $BACKEND_PID
+        kill -TERM $BACKEND_PID
+        wait $BACKEND_PID 2>/dev/null
     fi
     
+    bashio::log.info "Smart Stream stopped"
     exit 0
 }
 
@@ -78,9 +89,15 @@ bashio::log.info "Web UI and API available at: http://[HOST]:${PORT}"
 
 # Monitor backend process
 while true; do
+    # Check if we received a termination signal
+    if [ -f /tmp/stop_addon ]; then
+        bashio::log.info "Stop signal received, exiting..."
+        break
+    fi
+    
     if ! kill -0 $BACKEND_PID 2>/dev/null; then
         bashio::log.error "Backend process died! Restarting..."
-        cd /app && node apps/backend/dist/app.js &
+        cd /app && PORT=${PORT} DEBUG="smart-stream:*" node apps/backend/dist/app.js &
         BACKEND_PID=$!
     fi
     
