@@ -33,26 +33,61 @@ mkdir -p "$LOG_DIR"
 # Configure DNS for better connectivity
 bashio::log.info "Configuring DNS for network connectivity..."
 
-# Add Google DNS and Cloudflare DNS as fallbacks
-if ! grep -q "8.8.8.8" /etc/resolv.conf; then
-    echo "nameserver 8.8.8.8" >> /etc/resolv.conf
-fi
-if ! grep -q "1.1.1.1" /etc/resolv.conf; then
-    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
-fi
+# Show current DNS configuration
+bashio::log.info "Current DNS configuration:"
+cat /etc/resolv.conf | head -10
+
+# Add multiple DNS servers as fallbacks
+bashio::log.info "Adding fallback DNS servers..."
+{
+    echo "# Fallback DNS servers added by Smart Stream"
+    echo "nameserver 8.8.8.8      # Google DNS"
+    echo "nameserver 8.8.4.4      # Google DNS Secondary"
+    echo "nameserver 1.1.1.1      # Cloudflare DNS"
+    echo "nameserver 1.0.0.1      # Cloudflare DNS Secondary"
+    echo "nameserver 9.9.9.9      # Quad9 DNS"
+    echo "nameserver 208.67.222.222  # OpenDNS"
+} >> /etc/resolv.conf
+
+# Show updated DNS configuration
+bashio::log.info "Updated DNS configuration:"
+cat /etc/resolv.conf | head -15
 
 # Test DNS resolution for critical services
 bashio::log.info "Testing DNS resolution..."
-if nslookup google.com > /dev/null 2>&1; then
-    bashio::log.info "✅ DNS resolution working"
+
+# Test basic internet connectivity
+if ping -c 1 8.8.8.8 > /dev/null 2>&1; then
+    bashio::log.info "✅ Internet connectivity (ping to 8.8.8.8) working"
 else
-    bashio::log.warning "⚠️ DNS resolution issues detected"
+    bashio::log.warning "⚠️ Internet connectivity issues detected"
 fi
 
-if nslookup a.rtmp.youtube.com > /dev/null 2>&1; then
-    bashio::log.info "✅ YouTube RTMP DNS resolution working"
+# Test DNS resolution for common sites
+if nslookup google.com > /dev/null 2>&1; then
+    bashio::log.info "✅ DNS resolution (google.com) working"
 else
-    bashio::log.warning "⚠️ YouTube RTMP DNS resolution failed - streaming may not work"
+    bashio::log.warning "⚠️ DNS resolution (google.com) failed"
+fi
+
+# Test all YouTube RTMP endpoints
+youtube_endpoints=("a.rtmp.youtube.com" "b.rtmp.youtube.com" "c.rtmp.youtube.com" "d.rtmp.youtube.com")
+youtube_working=false
+
+for endpoint in "${youtube_endpoints[@]}"; do
+    if nslookup "$endpoint" > /dev/null 2>&1; then
+        bashio::log.info "✅ YouTube RTMP DNS resolution ($endpoint) working"
+        youtube_working=true
+    else
+        bashio::log.warning "⚠️ YouTube RTMP DNS resolution ($endpoint) failed"
+    fi
+done
+
+if [ "$youtube_working" = false ]; then
+    bashio::log.warning "🚨 All YouTube RTMP endpoints failed DNS resolution - streaming will likely fail"
+    bashio::log.info "Will attempt IP fallbacks during streaming..."
+else
+    bashio::log.info "✅ At least one YouTube RTMP endpoint is working"
 fi
 
 # Change to app directory

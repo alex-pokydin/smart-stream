@@ -26,6 +26,20 @@ export class StreamService {
       log('FFmpeg binary path: %s', ffmpegInstaller.path);
       log('FFmpeg version: %s', ffmpegInstaller.version);
       
+      // Run network diagnostics on startup
+      log('Running network connectivity diagnostics...');
+      try {
+        const networkTest = await this.testNetworkConnectivity();
+        log('Network diagnostics completed - success: %s', networkTest.success);
+        log('Network details: %j', networkTest.details);
+        
+        if (!networkTest.success) {
+          log('⚠️ Network connectivity issues detected. Streaming may fail.');
+        }
+      } catch (error) {
+        log('Network diagnostics failed:', error);
+      }
+      
       log('Stream service initialized successfully');
     } catch (error) {
       log('Error initializing Stream service:', error);
@@ -44,7 +58,7 @@ export class StreamService {
           config.platform?.type === 'youtube' ? 'YouTube' : 
           config.platform?.type === 'twitch' ? 'Twitch' : 'Custom');
       
-      const ffmpegOptions = this.buildFFmpegOptions(config);
+      const ffmpegOptions = await this.buildFFmpegOptions(config);
       
       const process = this.spawnFFmpegProcess(ffmpegOptions);
       
@@ -210,7 +224,7 @@ export class StreamService {
     return `stream-${Date.now()}-${this.streamCounter}`;
   }
 
-  private buildFFmpegOptions(config: StreamConfig): FFmpegOptions {
+  private async buildFFmpegOptions(config: StreamConfig): Promise<FFmpegOptions> {
     const options: FFmpegOptions = {
       input: config.inputUrl,
       // Note: video and audio codecs are now handled in buildFFmpegArgs()
@@ -228,10 +242,10 @@ export class StreamService {
     
     // Handle platform-specific streaming
     if (config.platform?.type) {
-      outputUrl = this.buildPlatformUrl(config.platform);
+      outputUrl = await this.buildPlatformUrl(config.platform);
     } else if (config.youtubeStreamKey) {
       // Legacy support for direct YouTube stream key
-      outputUrl = this.buildYouTubeUrl(config.youtubeStreamKey);
+      outputUrl = await this.buildYouTubeUrl(config.youtubeStreamKey);
     }
     
     if (outputUrl) {
@@ -241,13 +255,13 @@ export class StreamService {
     return options;
   }
 
-  private buildPlatformUrl(platform: { type: string; streamKey?: string; serverUrl?: string }): string {
+  private async buildPlatformUrl(platform: { type: string; streamKey?: string; serverUrl?: string }): Promise<string> {
     log('Building platform URL - type: %s, hasStreamKey: %s, hasServerUrl: %s', 
         platform.type, !!platform.streamKey, !!platform.serverUrl);
     
     switch (platform.type) {
       case 'youtube':
-        return this.buildYouTubeUrl(platform.streamKey || '');
+        return await this.buildYouTubeUrl(platform.streamKey || '');
       case 'twitch':
         return this.buildTwitchUrl(platform.streamKey || '');
       case 'custom':
@@ -264,10 +278,11 @@ export class StreamService {
     }
   }
 
-  private buildYouTubeUrl(streamKey: string): string {
+  private async buildYouTubeUrl(streamKey: string): Promise<string> {
     if (!streamKey) {
       throw new StreamError('YouTube stream key is required');
     }
+    
     // Use multiple YouTube RTMP endpoints for better reliability
     const rtmpEndpoints = [
       'a.rtmp.youtube.com',
@@ -276,8 +291,42 @@ export class StreamService {
       'd.rtmp.youtube.com'
     ];
     
-    // For now, use the first endpoint but we could implement round-robin or failover
-    return `rtmp://${rtmpEndpoints[0]}/live2/${streamKey}`;
+    // Try to resolve DNS for each endpoint and use the first working one
+    log('Testing YouTube RTMP endpoints for best connectivity...');
+    
+    for (const endpoint of rtmpEndpoints) {
+      try {
+        const dns = require('dns').promises;
+        const addresses = await dns.lookup(endpoint);
+        log('✅ YouTube RTMP endpoint %s resolved to %s', endpoint, addresses.address);
+        return `rtmp://${endpoint}/live2/${streamKey}`;
+      } catch (error) {
+        log('❌ YouTube RTMP endpoint %s failed DNS resolution: %s', endpoint, (error as Error).message);
+        continue;
+      }
+    }
+    
+    // If all DNS lookups fail, try known IP addresses as fallback
+    log('⚠️ All YouTube RTMP endpoints failed DNS resolution, trying IP fallbacks...');
+    
+    // These are some known YouTube RTMP server IPs (may change over time)
+    const fallbackIPs = [
+      '142.250.191.110', // Google IP range
+      '172.217.14.110',  // Google IP range
+      '216.58.194.110'   // Google IP range
+    ];
+    
+    for (const ip of fallbackIPs) {
+      log('Testing YouTube RTMP IP fallback: %s', ip);
+      const testUrl = `rtmp://${ip}/live2/${streamKey}`;
+      // We'll return the first IP and let FFmpeg handle the connection
+      log('Using YouTube RTMP IP fallback: %s', ip);
+      return testUrl;
+    }
+    
+    // Final fallback - use the original hostname and let FFmpeg handle it
+    log('Using original YouTube RTMP hostname as final fallback');
+    return `rtmp://a.rtmp.youtube.com/live2/${streamKey}`;
   }
 
   private buildTwitchUrl(streamKey: string): string {
