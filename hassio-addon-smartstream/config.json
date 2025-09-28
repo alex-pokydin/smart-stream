@@ -1,16 +1,42 @@
 {
-  "name": "Stream IpCam to Youtube",
-  "version": "0.021",
+  "name": "Smart Stream",
+  "version": "1.0.0",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
-  "slug": "stream_youtube_hassio",
-  "description": "Stream IpCam to Youtube addons",
+  "slug": "smart_stream",
+  "description": "Advanced IP camera streaming to multiple platforms (YouTube, Twitch, Custom RTMP) with ONVIF support",
+  "url": "https://github.com/your-repo/smart-stream",
   "startup": "application",
   "boot": "auto",
   "init": false,
-  "host_network": true,
+  "ingress": true,
+  "ingress_port": 3000,
+  "ports": {
+    "3000/tcp": 3000
+  },
+  "ports_description": {
+    "3000/tcp": "Web UI and API Port"
+  },
   "map": [
-    "share:rw"
+    "share:rw",
+    "media:rw"
   ],
-  "options": {},
-  "schema": {}
+  "options": {
+    "port": 3000,
+    "log_level": "info"
+  },
+  "schema": {
+    "port": "port",
+    "log_level": "list(debug|info|warn|error)?"
+  },
+  "environment": {
+    "NODE_ENV": "production"
+  },
+  "services": ["mqtt:want"],
+  "hassio_api": true,
+  "hassio_role": "default",
+  "homeassistant_api": true,
+  "host_network": false,
+  "privileged": ["SYS_ADMIN"],
+  "full_access": false,
+  "apparmor": false
 }

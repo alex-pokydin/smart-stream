@@ -80,8 +80,13 @@ export class SmartStreamApp {
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
     
-    // Static files (for legacy compatibility)
-    this.app.use('/static', express.static('public'));
+    // Static files for frontend (in production/addon mode)
+    if (process.env.NODE_ENV === 'production') {
+      this.app.use(express.static('public'));
+    } else {
+      // Development mode - serve legacy static files if any
+      this.app.use('/static', express.static('public'));
+    }
   }
 
   private async initializeServices(): Promise<void> {
@@ -121,21 +126,32 @@ export class SmartStreamApp {
     
     // Root endpoint
     this.app.get('/', (req, res) => {
-      res.json({
-        name: 'Smart Stream API',
-        version: '1.0.0',
-        status: 'running',
-        timestamp: new Date().toISOString()
-      });
+      // In production, serve the frontend app
+      if (process.env.NODE_ENV === 'production') {
+        res.sendFile('index.html', { root: 'public' });
+      } else {
+        // Development mode - return API info
+        res.json({
+          name: 'Smart Stream API',
+          version: '1.0.0',
+          status: 'running',
+          timestamp: new Date().toISOString()
+        });
+      }
     });
     
-    // 404 handler
+    // 404 handler - serve frontend for client-side routing in production
     this.app.use('*', (req, res) => {
-      res.status(404).json({
-        success: false,
-        error: 'Endpoint not found',
-        path: req.originalUrl
-      });
+      // In production, serve the frontend app for client-side routing
+      if (process.env.NODE_ENV === 'production' && !req.originalUrl.startsWith('/api') && !req.originalUrl.startsWith('/health')) {
+        res.sendFile('index.html', { root: 'public' });
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'Endpoint not found',
+          path: req.originalUrl
+        });
+      }
     });
   }
 

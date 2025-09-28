@@ -2,28 +2,48 @@ ARG BUILD_FROM
 FROM $BUILD_FROM
 
 ENV LANG C.UTF-8
+ENV NODE_ENV=production
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
-COPY package.json /
+# Install system dependencies
+RUN apk update && apk add --no-cache \
+    nodejs \
+    npm \
+    ffmpeg \
+    git \
+    nano \
+    curl \
+    python3 \
+    make \
+    g++ \
+    && npm install -g pnpm@8.10.0 \
+    && corepack enable
 
-RUN \ 
-    apk update \
-    && apk add --no-cache \
-        nodejs \
-        npm \
-        ffmpeg \
-        git \
-        nano \
-    && npm install \
-        --no-audit \
-        --no-fund \
-        --no-update-notifier \
-        --omit=dev \
-        --unsafe-perm \
-    \
-    && npm cache clear --force
-# Copy data for add-on
+# Set working directory
+WORKDIR /app
+
+# Copy package management files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/ ./packages/
+COPY apps/ ./apps/
+
+# Install dependencies and build
+RUN pnpm install --frozen-lockfile --prod=false \
+    && pnpm build \
+    && pnpm install --frozen-lockfile --prod \
+    && pnpm store prune \
+    && npm cache clean --force
+
+# Copy startup script
 COPY run.sh /
-COPY server/ /server/
 RUN chmod a+x /run.sh
+
+# Expose ports
+EXPOSE 3000 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
 
 CMD [ "/run.sh" ]
