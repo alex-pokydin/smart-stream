@@ -291,7 +291,7 @@ export class StreamService {
       'd.rtmp.youtube.com'
     ];
     
-    // Try to resolve DNS for each endpoint and use the first working one
+    // Try to resolve DNS for each endpoint and use the resolved IP directly
     log('Testing YouTube RTMP endpoints for best connectivity...');
     
     for (const endpoint of rtmpEndpoints) {
@@ -299,7 +299,12 @@ export class StreamService {
         const dns = require('dns').promises;
         const addresses = await dns.lookup(endpoint);
         log('✅ YouTube RTMP endpoint %s resolved to %s', endpoint, addresses.address);
-        return `rtmp://${endpoint}/live2/${streamKey}`;
+        
+        // Use the resolved IP address instead of hostname for FFmpeg
+        // This bypasses any DNS issues that FFmpeg might have
+        const ipBasedUrl = `rtmp://${addresses.address}/live2/${streamKey}`;
+        log('🎯 Using resolved IP for FFmpeg: %s (was %s)', addresses.address, endpoint);
+        return ipBasedUrl;
       } catch (error) {
         log('❌ YouTube RTMP endpoint %s failed DNS resolution: %s', endpoint, (error as Error).message);
         continue;
@@ -307,25 +312,27 @@ export class StreamService {
     }
     
     // If all DNS lookups fail, try known IP addresses as fallback
-    log('⚠️ All YouTube RTMP endpoints failed DNS resolution, trying IP fallbacks...');
+    log('⚠️ All YouTube RTMP endpoints failed DNS resolution, trying static IP fallbacks...');
     
     // These are some known YouTube RTMP server IPs (may change over time)
     const fallbackIPs = [
+      '216.58.215.76',   // Current a.rtmp.youtube.com IP from our logs
+      '172.217.19.108',  // Current b.rtmp.youtube.com IP from our logs
       '142.250.191.110', // Google IP range
       '172.217.14.110',  // Google IP range
       '216.58.194.110'   // Google IP range
     ];
     
     for (const ip of fallbackIPs) {
-      log('Testing YouTube RTMP IP fallback: %s', ip);
+      log('🔄 Trying YouTube RTMP static IP fallback: %s', ip);
       const testUrl = `rtmp://${ip}/live2/${streamKey}`;
       // We'll return the first IP and let FFmpeg handle the connection
-      log('Using YouTube RTMP IP fallback: %s', ip);
+      log('📡 Using YouTube RTMP static IP: %s', ip);
       return testUrl;
     }
     
     // Final fallback - use the original hostname and let FFmpeg handle it
-    log('Using original YouTube RTMP hostname as final fallback');
+    log('⚠️ Using original YouTube RTMP hostname as final fallback');
     return `rtmp://a.rtmp.youtube.com/live2/${streamKey}`;
   }
 
