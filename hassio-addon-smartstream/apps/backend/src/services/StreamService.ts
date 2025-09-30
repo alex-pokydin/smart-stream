@@ -559,9 +559,23 @@ export class StreamService {
     }
   }
 
+  private parseSpeedValue(speedString: string): number {
+    // Parse speed value from strings like "116x", "1.5x", "0x"
+    if (!speedString || speedString === '0x' || speedString === '') {
+      return 0;
+    }
+    
+    // Remove the 'x' suffix and convert to number
+    const numericPart = speedString.replace('x', '').trim();
+    const value = parseFloat(numericPart);
+    
+    return isNaN(value) ? 0 : value;
+  }
+
   private setupStreamMonitoring(stream: ActiveStream): void {
     let lastProgressTime = Date.now();
     let lastLogTime = Date.now();
+    let lastRestartTime = 0; // Track last restart to prevent too frequent restarts
     
     const monitorInterval = setInterval(() => {
       if (stream.status !== 'running' || stream.process.killed) {
@@ -572,10 +586,31 @@ export class StreamService {
       const currentTime = Date.now();
       const timeSinceLastProgress = currentTime - lastProgressTime;
       const timeSinceLastLog = currentTime - lastLogTime;
+      const timeSinceLastRestart = currentTime - lastRestartTime;
       
       // Check if we've had any progress updates
       if (stream.stats.fps > 0 || stream.stats.size !== '0B') {
         lastProgressTime = currentTime;
+      }
+      
+      // Parse speed value (e.g., "116x" -> 116)
+      const speedValue = this.parseSpeedValue(stream.stats.speed);
+      
+      // Check for stream failure conditions: FPS > 1.5 OR speed > 1.5x
+      const isFailed = stream.stats.fps > 1.5 || speedValue > 1.5;
+      
+      if (isFailed && timeSinceLastRestart > 300000) { // 5 minute cooldown between restarts
+        log('🚨 Stream %s FAILED - FPS: %s, Speed: %s (parsed: %s) - Restarting...', 
+            stream.id, stream.stats.fps, stream.stats.speed, speedValue);
+        
+        lastRestartTime = currentTime;
+        
+        // Restart the stream in the background (don't await to avoid blocking monitoring)
+        this.restartStream(stream.id).catch(error => {
+          log('❌ Failed to restart stream %s:', stream.id, error);
+        });
+        
+        return; // Exit this monitoring cycle as stream is being restarted
       }
       
       // Only log progress every 2 minutes when streaming is working fine
@@ -801,6 +836,36 @@ export class StreamService {
       
       req.end();
     });
+  }
+
+  // Restart a stream by stopping and starting it again
+  private async restartStream(streamId: string): Promise<void> {
+    try {
+      log('🔄 Restarting failed stream %s due to abnormal FPS/speed values', streamId);
+      
+      const stream = this.activeStreams.get(streamId);
+      if (!stream) {
+        log('Stream %s not found for restart', streamId);
+        return;
+      }
+      
+      const originalConfig = stream.config;
+      
+      // Stop the current stream completely
+      await this.stopStream(streamId);
+      
+      // Wait a moment for cleanup
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Start a new stream with the same configuration
+      log('🚀 Starting new stream instance after restart for failed stream');
+      await this.startStream(originalConfig);
+      
+      log('✅ Stream restart completed successfully');
+    } catch (error) {
+      log('❌ Error during stream restart:', error);
+      throw error;
+    }
   }
 
   // Health check
