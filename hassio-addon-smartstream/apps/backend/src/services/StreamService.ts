@@ -596,8 +596,8 @@ export class StreamService {
       // Parse speed value (e.g., "116x" -> 116)
       const speedValue = this.parseSpeedValue(stream.stats.speed);
       
-      // Check for stream failure conditions: FPS > 1.5 OR speed > 1.5x
-      const isFailed = stream.stats.fps > 1.5 || speedValue > 1.5;
+      // Check for stream failure conditions: FPS < 7 OR speed > 2x
+      const isFailed = stream.stats.fps < 7 || speedValue > 2;
       
       if (isFailed && timeSinceLastRestart > 300000) { // 5 minute cooldown between restarts
         log('🚨 Stream %s FAILED - FPS: %s, Speed: %s (parsed: %s) - Restarting...', 
