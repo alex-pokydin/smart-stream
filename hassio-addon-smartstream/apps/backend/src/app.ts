@@ -237,7 +237,7 @@ export class SmartStreamApp {
             }
           };
           
-          const streamStatus = await this.streaming.startStream(streamConfig);
+          const streamStatus = await this.streaming.startStream(streamConfig, true, camera.hostname);
           log('✅ Autostart stream started for camera %s: %s (ID: %s)', 
               camera.hostname, platform, streamStatus.id);
               

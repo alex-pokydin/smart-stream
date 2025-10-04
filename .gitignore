@@ -12,3 +12,5 @@ package-lock.json
 logs/
 html/hls/
 html/images/
+hassio-addon-smartstream/apps/backend/dist/
+hassio-addon-smartstream/apps/frontend/dist/

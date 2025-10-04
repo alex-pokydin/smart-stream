@@ -16,6 +16,8 @@ export class StreamService {
   private database: DatabaseService | null = null;
   private activeStreams: Map<string, ActiveStream> = new Map();
   private streamCounter = 0;
+  private autostartStreams: Map<string, { config: StreamConfig; cameraId: string; retryCount: number; lastRetry: Date }> = new Map();
+  private recoveryInterval: NodeJS.Timeout | null = null;
 
   public async initialize(database: DatabaseService): Promise<void> {
     try {
@@ -40,6 +42,9 @@ export class StreamService {
         log('Network diagnostics failed:', error);
       }
       
+      // Start the autostart stream recovery monitoring
+      this.startRecoveryMonitoring();
+      
       log('Stream service initialized successfully');
     } catch (error) {
       log('Error initializing Stream service:', error);
@@ -47,7 +52,7 @@ export class StreamService {
     }
   }
 
-  public async startStream(config: StreamConfig): Promise<StreamStatus> {
+  public async startStream(config: StreamConfig, isAutostart: boolean = false, cameraId?: string): Promise<StreamStatus> {
     const streamId = this.generateStreamId();
     
     try {
@@ -81,6 +86,17 @@ export class StreamService {
       this.activeStreams.set(streamId, stream);
       this.setupProcessHandlers(stream);
       this.setupStreamMonitoring(stream);
+
+      // Track autostart streams for recovery
+      if (isAutostart && cameraId) {
+        this.autostartStreams.set(streamId, {
+          config,
+          cameraId,
+          retryCount: 0,
+          lastRetry: new Date()
+        });
+        log('📝 Tracking autostart stream %s for camera %s', streamId, cameraId);
+      }
 
       // Wait a moment to see if the process starts successfully
       await this.waitForStreamStart(stream);
@@ -464,9 +480,15 @@ export class StreamService {
         stream.status = 'error';
         stream.errorMessage = `Process exited unexpectedly (code: ${code}, signal: ${signal})`;
         log('Stream %s marked as error due to unexpected exit', id);
+        
+        // Trigger recovery for autostart streams
+        this.handleStreamFailure(id, code, signal);
       } else {
         stream.status = 'idle';
         log('Stream %s stopped gracefully', id);
+        
+        // Clean up autostart tracking for gracefully stopped streams
+        this.autostartStreams.delete(id);
       }
       
       stream.endTime = new Date();
@@ -865,6 +887,110 @@ export class StreamService {
     } catch (error) {
       log('❌ Error during stream restart:', error);
       throw error;
+    }
+  }
+
+  // Handle stream failure and trigger recovery for autostart streams
+  private handleStreamFailure(streamId: string, code: number | null, signal: string | null): void {
+    const autostartInfo = this.autostartStreams.get(streamId);
+    if (autostartInfo) {
+      log('🔄 Autostart stream %s failed (code: %s, signal: %s), scheduling recovery', streamId, code, signal);
+      
+      // Update retry count and last retry time
+      autostartInfo.retryCount++;
+      autostartInfo.lastRetry = new Date();
+      
+      // Schedule recovery with exponential backoff (max 5 retries)
+      if (autostartInfo.retryCount <= 5) {
+        const delay = Math.min(1000 * Math.pow(2, autostartInfo.retryCount - 1), 30000); // Max 30 seconds
+        log('⏰ Scheduling recovery for stream %s in %dms (attempt %d/5)', streamId, delay, autostartInfo.retryCount);
+        
+        setTimeout(() => {
+          this.recoverAutostartStream(streamId, autostartInfo);
+        }, delay);
+      } else {
+        log('❌ Max retry attempts reached for autostart stream %s, giving up', streamId);
+        this.autostartStreams.delete(streamId);
+      }
+    }
+  }
+
+  // Recover a failed autostart stream
+  private async recoverAutostartStream(streamId: string, autostartInfo: { config: StreamConfig; cameraId: string; retryCount: number; lastRetry: Date }): Promise<void> {
+    try {
+      log('🚀 Attempting to recover autostart stream %s for camera %s (attempt %d)', streamId, autostartInfo.cameraId, autostartInfo.retryCount);
+      
+      // Remove the old stream from active streams if it still exists
+      if (this.activeStreams.has(streamId)) {
+        this.activeStreams.delete(streamId);
+      }
+      
+      // Start a new stream with the same configuration
+      const newStreamId = this.generateStreamId();
+      const newStream = await this.startStream(autostartInfo.config, true, autostartInfo.cameraId);
+      
+      // Update the autostart tracking with the new stream ID
+      this.autostartStreams.delete(streamId);
+      this.autostartStreams.set(newStreamId, {
+        config: autostartInfo.config,
+        cameraId: autostartInfo.cameraId,
+        retryCount: autostartInfo.retryCount,
+        lastRetry: new Date()
+      });
+      
+      log('✅ Successfully recovered autostart stream %s → %s', streamId, newStreamId);
+    } catch (error) {
+      log('❌ Failed to recover autostart stream %s:', streamId, error);
+      
+      // If recovery fails, schedule another attempt if we haven't exceeded max retries
+      if (autostartInfo.retryCount < 5) {
+        const delay = Math.min(1000 * Math.pow(2, autostartInfo.retryCount), 30000);
+        log('⏰ Scheduling retry for failed recovery in %dms', delay);
+        
+        setTimeout(() => {
+          this.recoverAutostartStream(streamId, autostartInfo);
+        }, delay);
+      } else {
+        log('❌ Max recovery attempts reached for autostart stream %s, giving up', streamId);
+        this.autostartStreams.delete(streamId);
+      }
+    }
+  }
+
+  // Start recovery monitoring for autostart streams
+  private startRecoveryMonitoring(): void {
+    // Check every 30 seconds for failed autostart streams that might need recovery
+    this.recoveryInterval = setInterval(() => {
+      this.checkFailedAutostartStreams();
+    }, 30000);
+    
+    log('🔄 Started autostart stream recovery monitoring');
+  }
+
+  // Check for failed autostart streams that need recovery
+  private checkFailedAutostartStreams(): void {
+    const now = new Date();
+    const maxRetryInterval = 5 * 60 * 1000; // 5 minutes
+    
+    for (const [streamId, autostartInfo] of this.autostartStreams.entries()) {
+      const stream = this.activeStreams.get(streamId);
+      
+      // If stream is not active or has error status, and enough time has passed since last retry
+      if ((!stream || stream.status === 'error') && 
+          (now.getTime() - autostartInfo.lastRetry.getTime()) > maxRetryInterval) {
+        
+        log('🔍 Found failed autostart stream %s that needs recovery', streamId);
+        this.handleStreamFailure(streamId, null, 'monitoring');
+      }
+    }
+  }
+
+  // Cleanup method to stop recovery monitoring
+  public cleanup(): void {
+    if (this.recoveryInterval) {
+      clearInterval(this.recoveryInterval);
+      this.recoveryInterval = null;
+      log('🔄 Stopped autostart stream recovery monitoring');
     }
   }
 
