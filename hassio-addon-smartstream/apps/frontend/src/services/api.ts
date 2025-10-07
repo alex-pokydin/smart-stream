@@ -143,6 +143,41 @@ export const streamService = {
     if (!response.data.data) throw new Error('Failed to get stream stats');
     return response.data.data;
   },
+
+  async restartStream(streamId: string): Promise<StreamStatus> {
+    const response = await api.post<ApiResponse<StreamStatus>>(`/streams/${streamId}/restart`);
+    if (!response.data.data) throw new Error('Failed to restart stream');
+    return response.data.data;
+  },
+
+  async getStreamDiagnostics(streamId: string): Promise<{
+    streamId: string;
+    status: StreamStatus;
+    networkConnectivity: any;
+    ffmpegInfo: any;
+    timestamp: string;
+  }> {
+    const response = await api.get(`/streams/${streamId}/diagnostics`);
+    if (!response.data.data) throw new Error('Failed to get stream diagnostics');
+    return response.data.data;
+  },
+
+  async testRtspConnection(hostname: string): Promise<{
+    success: boolean;
+    data: {
+      hostname: string;
+      rtspUrl: string;
+      testResult: {
+        success: boolean;
+        error?: string;
+        outputLength: number;
+      };
+    };
+    message: string;
+  }> {
+    const response = await api.post('/streams/test-rtsp', { hostname });
+    return response.data;
+  },
 };
 
 // Health API

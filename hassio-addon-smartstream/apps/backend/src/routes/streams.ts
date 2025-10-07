@@ -207,21 +207,15 @@ export function createStreamRouter(streaming: StreamService, database: DatabaseS
           throw new StreamError('Stream ID parameter is required');
         }
         
-        // Get current stream status to extract config
-        const currentStatus = streaming.getStreamStatus(streamId);
+        log('Manual restart requested for stream %s', streamId);
         
-        // Stop the current stream
-        await streaming.stopStream(streamId);
+        // Use the new restart method
+        const newStream = await streaming.restartStreamPublic(streamId);
         
-        // Wait a moment for cleanup
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Start a new stream with the same configuration
-        // Note: This is a simplified restart - in production you might want to store
-        // the original configuration and reuse it
         const response: ApiResponse = {
           success: true,
-          message: 'Stream restart initiated - please start a new stream with the desired configuration'
+          data: newStream,
+          message: `Stream restarted successfully. New stream ID: ${newStream.id}`
         };
 
         res.json(response);
@@ -253,6 +247,38 @@ export function createStreamRouter(streaming: StreamService, database: DatabaseS
             duration: streamStatus.startTime 
               ? Date.now() - streamStatus.startTime.getTime()
               : 0
+          }
+        };
+
+        res.json(response);
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  // GET /streams/:streamId/diagnostics - Get detailed stream diagnostics
+  router.get(
+    '/:streamId/diagnostics',
+    validateParams(streamIdParamSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { streamId } = req.params;
+        if (!streamId) {
+          throw new StreamError('Stream ID parameter is required');
+        }
+        
+        const streamStatus = streaming.getStreamStatus(streamId);
+        const networkTest = await streaming.testNetworkConnectivity();
+        
+        const response: ApiResponse = {
+          success: true,
+          data: {
+            streamId,
+            status: streamStatus,
+            networkConnectivity: networkTest,
+            ffmpegInfo: streaming.getFFmpegInfo(),
+            timestamp: new Date().toISOString()
           }
         };
 

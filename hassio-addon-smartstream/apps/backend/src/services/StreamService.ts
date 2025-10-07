@@ -175,6 +175,13 @@ export class StreamService {
       // Clean up monitoring interval
       if ((stream as any).monitorInterval) {
         clearInterval((stream as any).monitorInterval);
+        log('Stream %s monitoring interval cleared', streamId);
+      }
+      
+      // Clean up heartbeat timer
+      if ((stream as any).heartbeatTimer) {
+        clearInterval((stream as any).heartbeatTimer);
+        log('Stream %s heartbeat timer cleared', streamId);
       }
       
       this.activeStreams.delete(streamId);
@@ -457,35 +464,59 @@ export class StreamService {
     const { process, id } = stream;
 
     process.on('spawn', () => {
-      log('Stream %s process spawned successfully', id);
+      log('🎬 Stream %s process spawned successfully with PID: %s', id, process.pid);
       stream.status = 'running';
+      
+      // Log process details for debugging
+      log('Stream %s process details - PID: %s, killed: %s, exitCode: %s', 
+          id, process.pid, process.killed, process.exitCode);
     });
 
     process.on('error', (error) => {
-      log('Stream %s process spawn error:', id, error);
+      log('❌ Stream %s process spawn error:', id, error);
+      log('Stream %s error details - name: %s, message: %s, code: %s, errno: %s, syscall: %s', 
+          id, error.name, error.message, (error as any).code, (error as any).errno, (error as any).syscall);
+      
       stream.status = 'error';
       stream.errorMessage = `Process spawn error: ${error.message}`;
       stream.endTime = new Date();
+      
+      // Log system information for debugging
+      this.logSystemInfo(id, 'process_spawn_error');
     });
 
     process.on('exit', (code, signal) => {
-      log('Stream %s process exited - code: %s, signal: %s', id, code, signal);
+      const exitReason = this.determineExitReason(code, signal);
+      log('🚪 Stream %s process exited - code: %s, signal: %s, reason: %s', id, code, signal, exitReason);
+      
+      // Log detailed exit information
+      log('Stream %s exit details - PID: %s, killed: %s, spawnTime: %s, duration: %dms', 
+          id, process.pid, process.killed, stream.startTime.toISOString(), 
+          Date.now() - stream.startTime.getTime());
       
       // Clean up monitoring interval
       if ((stream as any).monitorInterval) {
         clearInterval((stream as any).monitorInterval);
+        log('Stream %s monitoring interval cleared', id);
       }
       
       if (stream.status !== 'stopping') {
         stream.status = 'error';
-        stream.errorMessage = `Process exited unexpectedly (code: ${code}, signal: ${signal})`;
-        log('Stream %s marked as error due to unexpected exit', id);
+        stream.errorMessage = `Process exited unexpectedly: ${exitReason} (code: ${code}, signal: ${signal})`;
+        log('❌ Stream %s marked as error due to unexpected exit - %s', id, exitReason);
+        
+        // Log final stream stats before failure
+        log('Stream %s final stats before failure - FPS: %s, Size: %s, Time: %s, Speed: %s', 
+            id, stream.stats.fps, stream.stats.size, stream.stats.time, stream.stats.speed);
+        
+        // Log system information for debugging
+        this.logSystemInfo(id, 'unexpected_exit');
         
         // Trigger recovery for autostart streams
         this.handleStreamFailure(id, code, signal);
       } else {
         stream.status = 'idle';
-        log('Stream %s stopped gracefully', id);
+        log('✅ Stream %s stopped gracefully', id);
         
         // Clean up autostart tracking for gracefully stopped streams
         this.autostartStreams.delete(id);
@@ -494,39 +525,95 @@ export class StreamService {
       stream.endTime = new Date();
     });
 
+    // Add process monitoring for unresponsive processes
+    this.setupProcessHeartbeat(stream);
+
     // Parse FFmpeg stderr for progress information and errors
     process.stderr?.on('data', (data) => {
       const output = data.toString();
       this.parseFFmpegProgress(stream, output);
       
-      // Only log important events and errors (filter out routine debug output)
+      // Enhanced error detection and logging
+      const trimmedOutput = output.trim();
+      
+      // Network-related errors
       if (output.includes('Connection refused') || output.includes('Network is unreachable')) {
-        log('Stream %s NETWORK ERROR: %s', id, output.trim());
+        log('🌐 Stream %s NETWORK ERROR: %s', id, trimmedOutput);
+        this.logNetworkError(stream, trimmedOutput);
       }
+      else if (output.includes('Name or service not known') || output.includes('getaddrinfo failed')) {
+        log('🔍 Stream %s DNS ERROR: %s', id, trimmedOutput);
+        this.logNetworkError(stream, trimmedOutput);
+      }
+      else if (output.includes('Connection timed out') || output.includes('timeout')) {
+        log('⏰ Stream %s TIMEOUT ERROR: %s', id, trimmedOutput);
+        this.logNetworkError(stream, trimmedOutput);
+      }
+      
+      // Codec/format errors
       else if (output.includes('Invalid data found') || output.includes('could not find codec')) {
-        log('Stream %s CODEC/FORMAT ERROR: %s', id, output.trim());
+        log('🎬 Stream %s CODEC/FORMAT ERROR: %s', id, trimmedOutput);
+        this.logCodecError(stream, trimmedOutput);
       }
+      else if (output.includes('Unsupported codec') || output.includes('codec not currently supported')) {
+        log('❌ Stream %s UNSUPPORTED CODEC: %s', id, trimmedOutput);
+        this.logCodecError(stream, trimmedOutput);
+      }
+      
+      // File/permission errors
       else if (output.includes('Permission denied') || output.includes('No such file')) {
-        log('Stream %s FILE/PERMISSION ERROR: %s', id, output.trim());
+        log('🔒 Stream %s FILE/PERMISSION ERROR: %s', id, trimmedOutput);
+        this.logFileError(stream, trimmedOutput);
       }
-      else if (output.includes('timeout') || output.includes('timed out')) {
-        log('Stream %s TIMEOUT ERROR: %s', id, output.trim());
+      else if (output.includes('No space left on device') || output.includes('disk full')) {
+        log('💾 Stream %s DISK SPACE ERROR: %s', id, trimmedOutput);
+        this.logSystemError(stream, trimmedOutput);
       }
-      else if (output.includes('RTSP') && output.includes('failed')) {
-        log('Stream %s RTSP ERROR: %s', id, output.trim());
+      
+      // RTSP specific errors
+      else if (output.includes('RTSP') && (output.includes('failed') || output.includes('error'))) {
+        log('📡 Stream %s RTSP ERROR: %s', id, trimmedOutput);
+        this.logRtspError(stream, trimmedOutput);
       }
+      else if (output.includes('401 Unauthorized') || output.includes('authentication failed')) {
+        log('🔐 Stream %s AUTHENTICATION ERROR: %s', id, trimmedOutput);
+        this.logAuthError(stream, trimmedOutput);
+      }
+      
+      // Memory/resource errors
+      else if (output.includes('Cannot allocate memory') || output.includes('out of memory')) {
+        log('🧠 Stream %s MEMORY ERROR: %s', id, trimmedOutput);
+        this.logSystemError(stream, trimmedOutput);
+      }
+      
+      // Success indicators
       else if (output.includes('Input #0')) {
-        log('Stream %s ✅ Input source detected', id);
+        log('✅ Stream %s Input source detected: %s', id, trimmedOutput);
       }
       else if (output.includes('Output #0')) {
-        log('Stream %s ✅ Output started', id);
+        log('✅ Stream %s Output started: %s', id, trimmedOutput);
       }
       else if (output.includes('Stream mapping:')) {
-        log('Stream %s ✅ Stream mapping configured', id);
+        log('✅ Stream %s Stream mapping configured: %s', id, trimmedOutput);
       }
-      // Log other significant errors
+      else if (output.includes('Press [q] to stop') || output.includes('frame=')) {
+        // These are normal progress indicators, log less frequently
+        if (Math.random() < 0.01) { // Log 1% of these messages
+          log('📊 Stream %s Progress: %s', id, trimmedOutput.substring(0, 100));
+        }
+      }
+      
+      // Other significant errors
       else if (output.includes('error') || output.includes('Error') || output.includes('failed') || output.includes('Failed')) {
-        log('Stream %s ERROR: %s', id, output.trim());
+        log('❌ Stream %s GENERAL ERROR: %s', id, trimmedOutput);
+        this.logGeneralError(stream, trimmedOutput);
+      }
+      
+      // Log any output that might indicate stream issues
+      else if (output.includes('warning') || output.includes('Warning')) {
+        if (Math.random() < 0.1) { // Log 10% of warnings
+          log('⚠️ Stream %s WARNING: %s', id, trimmedOutput);
+        }
       }
     });
 
@@ -872,6 +959,12 @@ export class StreamService {
       }
       
       const originalConfig = stream.config;
+      const autostartInfo = this.autostartStreams.get(streamId);
+      
+      // Log restart reason and current stats
+      log('🔄 Stream %s restart details - FPS: %s, Speed: %s, Size: %s, Duration: %dms', 
+          streamId, stream.stats.fps, stream.stats.speed, stream.stats.size, 
+          Date.now() - stream.startTime.getTime());
       
       // Stop the current stream completely
       await this.stopStream(streamId);
@@ -881,11 +974,27 @@ export class StreamService {
       
       // Start a new stream with the same configuration
       log('🚀 Starting new stream instance after restart for failed stream');
-      await this.startStream(originalConfig);
+      const newStream = await this.startStream(originalConfig, !!autostartInfo, autostartInfo?.cameraId);
       
-      log('✅ Stream restart completed successfully');
+      // Update autostart tracking if this was an autostart stream
+      if (autostartInfo) {
+        this.autostartStreams.delete(streamId);
+        this.autostartStreams.set(newStream.id, {
+          config: autostartInfo.config,
+          cameraId: autostartInfo.cameraId,
+          retryCount: autostartInfo.retryCount,
+          lastRetry: new Date()
+        });
+        log('📝 Updated autostart tracking: %s → %s', streamId, newStream.id);
+      }
+      
+      log('✅ Stream restart completed successfully: %s → %s', streamId, newStream.id);
     } catch (error) {
       log('❌ Error during stream restart:', error);
+      
+      // If restart fails, log system info for debugging
+      this.logSystemInfo(streamId, 'restart_failure');
+      
       throw error;
     }
   }
@@ -994,6 +1103,237 @@ export class StreamService {
     }
   }
 
+  // Public method to restart a stream (for API use)
+  public async restartStreamPublic(streamId: string): Promise<StreamStatus> {
+    try {
+      log('🔄 Manual restart requested for stream %s', streamId);
+      
+      const stream = this.activeStreams.get(streamId);
+      if (!stream) {
+        throw new StreamError(`Stream ${streamId} not found`, streamId);
+      }
+      
+      const originalConfig = stream.config;
+      const autostartInfo = this.autostartStreams.get(streamId);
+      
+      // Log restart details
+      log('🔄 Manual restart details - FPS: %s, Speed: %s, Size: %s, Duration: %dms', 
+          streamId, stream.stats.fps, stream.stats.speed, stream.stats.size, 
+          Date.now() - stream.startTime.getTime());
+      
+      // Stop the current stream
+      await this.stopStream(streamId);
+      
+      // Wait for cleanup
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Start new stream
+      const newStream = await this.startStream(originalConfig, !!autostartInfo, autostartInfo?.cameraId);
+      
+      // Update autostart tracking if needed
+      if (autostartInfo) {
+        this.autostartStreams.set(newStream.id, {
+          config: autostartInfo.config,
+          cameraId: autostartInfo.cameraId,
+          retryCount: 0, // Reset retry count for manual restart
+          lastRetry: new Date()
+        });
+        log('📝 Updated autostart tracking for manual restart: %s → %s', streamId, newStream.id);
+      }
+      
+      log('✅ Manual stream restart completed: %s → %s', streamId, newStream.id);
+      return newStream;
+    } catch (error) {
+      log('❌ Error during manual stream restart:', error);
+      this.logSystemInfo(streamId, 'manual_restart_failure');
+      throw error;
+    }
+  }
+
+  // Determine the reason for process exit
+  private determineExitReason(code: number | null, signal: string | null): string {
+    if (signal) {
+      switch (signal) {
+        case 'SIGTERM': return 'Terminated by system or user (SIGTERM)';
+        case 'SIGKILL': return 'Force killed by system (SIGKILL)';
+        case 'SIGINT': return 'Interrupted by user (SIGINT)';
+        case 'SIGQUIT': return 'Quit signal received (SIGQUIT)';
+        case 'SIGHUP': return 'Hangup signal received (SIGHUP)';
+        case 'SIGPIPE': return 'Broken pipe - connection lost (SIGPIPE)';
+        case 'SIGALRM': return 'Alarm signal - timeout (SIGALRM)';
+        default: return `Unknown signal: ${signal}`;
+      }
+    }
+    
+    if (code !== null) {
+      switch (code) {
+        case 0: return 'Normal exit (success)';
+        case 1: return 'General error - check FFmpeg logs';
+        case 2: return 'FFmpeg misuse - invalid arguments';
+        case 126: return 'Command invoked cannot execute';
+        case 127: return 'Command not found';
+        case 128: return 'Invalid exit argument';
+        case 130: return 'Script terminated by Control-C';
+        case 255: return 'Exit status out of range';
+        default: 
+          if (code > 128) {
+            return `Signal-based exit (signal ${code - 128})`;
+          }
+          return `FFmpeg error code: ${code}`;
+      }
+    }
+    
+    return 'Unknown exit reason';
+  }
+
+  // Log system information for debugging
+  private logSystemInfo(streamId: string, context: string): void {
+    try {
+      const os = require('os');
+      const systemInfo = {
+        context,
+        streamId,
+        timestamp: new Date().toISOString(),
+        platform: os.platform(),
+        arch: os.arch(),
+        nodeVersion: process.version,
+        memory: {
+          total: os.totalmem(),
+          free: os.freemem(),
+          used: os.totalmem() - os.freemem()
+        },
+        loadAverage: os.loadavg(),
+        uptime: os.uptime(),
+        cpus: os.cpus().length,
+        processMemory: process.memoryUsage()
+      };
+      
+      log('System info for stream %s (%s): %j', streamId, context, systemInfo);
+    } catch (error) {
+      log('Failed to log system info for stream %s: %s', streamId, (error as Error).message);
+    }
+  }
+
+  // Setup process heartbeat monitoring
+  private setupProcessHeartbeat(stream: ActiveStream): void {
+    const { process, id } = stream;
+    let lastHeartbeat = Date.now();
+    let heartbeatMissed = 0;
+    const maxMissedHeartbeats = 3;
+    const heartbeatInterval = 30000; // 30 seconds
+    
+    const heartbeatTimer = setInterval(() => {
+      if (stream.status !== 'running' || process.killed) {
+        clearInterval(heartbeatTimer);
+        return;
+      }
+      
+      const now = Date.now();
+      const timeSinceLastHeartbeat = now - lastHeartbeat;
+      
+      // Check if process is still responsive
+      if (process.pid && !process.killed) {
+        try {
+          // Try to send a signal 0 to check if process is alive
+          process.kill(0);
+          lastHeartbeat = now;
+          heartbeatMissed = 0;
+          
+          // Log heartbeat every 5 minutes
+          if (timeSinceLastHeartbeat > 300000) {
+            log('💓 Stream %s heartbeat - PID: %s, alive: true, uptime: %dms', 
+                id, process.pid, now - stream.startTime.getTime());
+          }
+        } catch (error) {
+          heartbeatMissed++;
+          log('💔 Stream %s heartbeat failed (attempt %d/%d) - PID: %s, error: %s', 
+              id, heartbeatMissed, maxMissedHeartbeats, process.pid, (error as Error).message);
+          
+          if (heartbeatMissed >= maxMissedHeartbeats) {
+            log('💀 Stream %s process appears to be dead after %d failed heartbeats', id, maxMissedHeartbeats);
+            clearInterval(heartbeatTimer);
+            
+            // Mark stream as failed
+            stream.status = 'error';
+            stream.errorMessage = `Process became unresponsive after ${maxMissedHeartbeats} failed heartbeats`;
+            stream.endTime = new Date();
+            
+            // Trigger recovery
+            this.handleStreamFailure(id, null, 'heartbeat_failure');
+          }
+        }
+      } else {
+        log('💀 Stream %s process PID is null or killed, stopping heartbeat monitoring', id);
+        clearInterval(heartbeatTimer);
+      }
+    }, heartbeatInterval);
+    
+    // Store the heartbeat timer for cleanup
+    (stream as any).heartbeatTimer = heartbeatTimer;
+  }
+
+  // Specialized error logging methods
+  private logNetworkError(stream: ActiveStream, error: string): void {
+    log('🌐 Stream %s network error details - inputUrl: %s, error: %s', 
+        stream.id, stream.config.inputUrl.replace(/\/\/.*@/, '//[CREDENTIALS]@'), error);
+    
+    // Run network diagnostics in background
+    this.testNetworkConnectivity().then(result => {
+      log('🌐 Stream %s network diagnostics after error: %j', stream.id, result);
+    }).catch(diagError => {
+      log('🌐 Stream %s network diagnostics failed: %s', stream.id, (diagError as Error).message);
+    });
+  }
+
+  private logCodecError(stream: ActiveStream, error: string): void {
+    log('🎬 Stream %s codec error details - inputUrl: %s, error: %s', 
+        stream.id, stream.config.inputUrl.replace(/\/\/.*@/, '//[CREDENTIALS]@'), error);
+    
+    // Log current stream configuration
+    log('🎬 Stream %s configuration: %j', stream.id, {
+      quality: stream.config.quality,
+      fps: stream.config.fps,
+      resolution: stream.config.resolution,
+      bitrate: stream.config.bitrate
+    });
+  }
+
+  private logFileError(stream: ActiveStream, error: string): void {
+    log('🔒 Stream %s file/permission error details - inputUrl: %s, error: %s', 
+        stream.id, stream.config.inputUrl.replace(/\/\/.*@/, '//[CREDENTIALS]@'), error);
+  }
+
+  private logSystemError(stream: ActiveStream, error: string): void {
+    log('💾 Stream %s system error details - error: %s', stream.id, error);
+    this.logSystemInfo(stream.id, 'system_error');
+  }
+
+  private logRtspError(stream: ActiveStream, error: string): void {
+    log('📡 Stream %s RTSP error details - inputUrl: %s, error: %s', 
+        stream.id, stream.config.inputUrl.replace(/\/\/.*@/, '//[CREDENTIALS]@'), error);
+    
+    // Test RTSP connectivity in background
+    this.testRtspConnection(stream.config.inputUrl).then(result => {
+      log('📡 Stream %s RTSP test after error: success=%s, error=%s', 
+          stream.id, result.success, result.error);
+    }).catch(testError => {
+      log('📡 Stream %s RTSP test failed: %s', stream.id, (testError as Error).message);
+    });
+  }
+
+  private logAuthError(stream: ActiveStream, error: string): void {
+    log('🔐 Stream %s authentication error details - inputUrl: %s, error: %s', 
+        stream.id, stream.config.inputUrl.replace(/\/\/.*@/, '//[CREDENTIALS]@'), error);
+  }
+
+  private logGeneralError(stream: ActiveStream, error: string): void {
+    log('❌ Stream %s general error details - inputUrl: %s, error: %s', 
+        stream.id, stream.config.inputUrl.replace(/\/\/.*@/, '//[CREDENTIALS]@'), error);
+    
+    // Log current stream stats
+    log('❌ Stream %s current stats: %j', stream.id, stream.stats);
+  }
+
   // Health check
   public async healthCheck(): Promise<boolean> {
     try {
@@ -1003,25 +1343,53 @@ export class StreamService {
       const testProcess = spawn(ffmpegInstaller.path, ['-version'], { stdio: 'pipe' });
       
       return new Promise((resolve) => {
-        testProcess.on('exit', (code) => {
-          log('FFmpeg health check exit code: %d', code);
-          resolve(code === 0);
+        let resolved = false;
+        
+        testProcess.on('exit', (code, signal) => {
+          if (resolved) return;
+          resolved = true;
+          
+          log('FFmpeg health check exit code: %d, signal: %s', code, signal);
+          
+          if (code === 0) {
+            log('✅ FFmpeg health check passed');
+            resolve(true);
+          } else {
+            log('❌ FFmpeg health check failed with code: %d', code);
+            resolve(false);
+          }
         });
         
         testProcess.on('error', (error) => {
-          log('FFmpeg health check error:', error);
+          if (resolved) return;
+          resolved = true;
+          
+          log('❌ FFmpeg health check error: %s', (error as Error).message);
+          log('FFmpeg error details - name: %s, code: %s, errno: %s, syscall: %s', 
+              (error as any).name, (error as any).code, (error as any).errno, (error as any).syscall);
           resolve(false);
         });
         
-        // Timeout after 5 seconds
+        // Increased timeout to 10 seconds for better reliability
         setTimeout(() => {
-          testProcess.kill();
-          log('FFmpeg health check timeout');
+          if (resolved) return;
+          resolved = true;
+          
+          log('⏰ FFmpeg health check timeout after 10 seconds');
+          testProcess.kill('SIGTERM');
+          
+          // Force kill after another 2 seconds
+          setTimeout(() => {
+            if (!testProcess.killed) {
+              testProcess.kill('SIGKILL');
+            }
+          }, 2000);
+          
           resolve(false);
-        }, 5000);
+        }, 10000);
       });
     } catch (error) {
-      log('FFmpeg health check exception:', error);
+      log('❌ FFmpeg health check exception: %s', (error as Error).message);
       return false;
     }
   }

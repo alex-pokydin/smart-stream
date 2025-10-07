@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Cameras from './pages/Cameras';
+import Streams from './pages/Streams';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import NotFound from './pages/NotFound';
@@ -13,6 +14,7 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/cameras" element={<Cameras />} />
+        <Route path="/streams" element={<Streams />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/logs" element={<Logs />} />
         <Route path="*" element={<NotFound />} />
