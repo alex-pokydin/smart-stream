@@ -701,12 +701,19 @@ export class StreamService {
             log('🚨 Stream %s ABNORMAL SPEED - speed=%s (parsed: %s)', stream.id, speedMatch[1], speedValue);
             (stream as any).abnormalSpeedCount = ((stream as any).abnormalSpeedCount || 0) + 1;
             
-            // Immediate restart for extreme speed values (>50x)
+            // Immediate restart for extreme speed values (>2x with your current setting)
             if (speedValue > 2) {
-              log('🚨 Stream %s EXTREME SPEED - speed=%s (parsed: %s) - Triggering immediate restart!', stream.id, speedMatch[1], speedValue);
+              // Check if we've already triggered a restart recently to prevent spam
+              const lastRestartTrigger = (stream as any).lastRestartTrigger || 0;
+              const timeSinceLastTrigger = Date.now() - lastRestartTrigger;
               
-              // Trigger immediate restart for extreme speeds
-              this.handleImmediateRestart(stream.id, `Extreme speed: ${speedValue}x`);
+              if (timeSinceLastTrigger > 5000) { // 5 second debounce
+                log('🚨 Stream %s EXTREME SPEED - speed=%s (parsed: %s) - Triggering immediate restart!', stream.id, speedMatch[1], speedValue);
+                (stream as any).lastRestartTrigger = Date.now();
+                
+                // Trigger immediate restart for extreme speeds
+                this.handleImmediateRestart(stream.id, `Extreme speed: ${speedValue}x`);
+              }
             }
           } else {
             (stream as any).abnormalSpeedCount = 0;
@@ -1081,6 +1088,13 @@ export class StreamService {
   private handleImmediateRestart(streamId: string, reason: string): void {
     const stream = this.activeStreams.get(streamId);
     if (!stream || stream.status !== 'running') {
+      log('⏰ Stream %s immediate restart skipped - stream not running or not found (status: %s)', streamId, stream?.status);
+      return;
+    }
+    
+    // Check if restart is already in progress
+    if ((stream as any).restartInProgress) {
+      log('⏰ Stream %s immediate restart skipped - restart already in progress', streamId);
       return;
     }
     
@@ -1088,17 +1102,31 @@ export class StreamService {
     const lastRestartTime = (stream as any).lastRestartTime || 0;
     const timeSinceLastRestart = Date.now() - lastRestartTime;
     
-    if (timeSinceLastRestart < 60000) { // 1 minute cooldown
+    if (timeSinceLastRestart < 30000) { // 30 second cooldown (reduced from 1 minute)
       log('⏰ Stream %s immediate restart skipped - too soon since last restart (%dms ago)', streamId, timeSinceLastRestart);
       return;
     }
     
-    log('🚨 Stream %s IMMEDIATE RESTART - Reason: %s', streamId, reason);
+    log('🚨 Stream %s IMMEDIATE RESTART INITIATED - Reason: %s', streamId, reason);
+    log('🚨 Stream %s restart details - FPS: %s, Speed: %s, Size: %s, Duration: %dms', 
+        streamId, stream.stats.fps, stream.stats.speed, stream.stats.size, 
+        Date.now() - stream.startTime.getTime());
+    
     (stream as any).lastRestartTime = Date.now();
+    (stream as any).restartInProgress = true;
     
     // Restart the stream immediately
-    this.restartStream(streamId).catch(error => {
+    this.restartStream(streamId).then(() => {
+      log('✅ Stream %s immediate restart completed successfully', streamId);
+    }).catch(error => {
       log('❌ Failed to immediately restart stream %s:', streamId, error);
+      // If restart fails, try to stop the stream to prevent it from continuing in bad state
+      this.stopStream(streamId).catch(stopError => {
+        log('❌ Failed to stop failed stream %s:', streamId, stopError);
+      });
+    }).finally(() => {
+      // Clear the restart in progress flag
+      (stream as any).restartInProgress = false;
     });
   }
 
