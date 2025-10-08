@@ -603,11 +603,19 @@ export class StreamService {
         }
       }
       
-      // Other significant errors
-      else if (output.includes('error') || output.includes('Error') || output.includes('failed') || output.includes('Failed')) {
-        log('❌ Stream %s GENERAL ERROR: %s', id, trimmedOutput);
-        this.logGeneralError(stream, trimmedOutput);
-      }
+       // RTSP SDP parsing errors (not fatal)
+       else if (output.includes('Failed to parse interval end specification') || output.includes('SDP:')) {
+         // These are usually non-fatal RTSP parsing warnings, log less frequently
+         if (Math.random() < 0.1) { // Log 10% of these
+           log('📡 Stream %s RTSP SDP parsing: %s', id, trimmedOutput.substring(0, 100));
+         }
+       }
+       
+       // Other significant errors
+       else if (output.includes('error') || output.includes('Error') || output.includes('failed') || output.includes('Failed')) {
+         log('❌ Stream %s GENERAL ERROR: %s', id, trimmedOutput);
+         this.logGeneralError(stream, trimmedOutput);
+       }
       
       // Log any output that might indicate stream issues
       else if (output.includes('warning') || output.includes('Warning')) {
@@ -1087,8 +1095,13 @@ export class StreamService {
   // Handle immediate restart for extreme conditions
   private handleImmediateRestart(streamId: string, reason: string): void {
     const stream = this.activeStreams.get(streamId);
-    if (!stream || stream.status !== 'running') {
-      log('⏰ Stream %s immediate restart skipped - stream not running or not found (status: %s)', streamId, stream?.status);
+    if (!stream) {
+      log('⏰ Stream %s immediate restart skipped - stream not found in activeStreams', streamId);
+      return;
+    }
+    
+    if (stream.status !== 'running') {
+      log('⏰ Stream %s immediate restart skipped - stream not running (status: %s)', streamId, stream.status);
       return;
     }
     
@@ -1142,7 +1155,7 @@ export class StreamService {
       
       // Schedule recovery with exponential backoff (max 5 retries)
       if (autostartInfo.retryCount <= 5) {
-        const delay = Math.min(1000 * Math.pow(2, autostartInfo.retryCount - 1), 30000); // Max 30 seconds
+        const delay = Math.min(5000 * Math.pow(2, autostartInfo.retryCount - 1), 60000); // Start at 5s, max 60 seconds
         log('⏰ Scheduling recovery for stream %s in %dms (attempt %d/5)', streamId, delay, autostartInfo.retryCount);
         
         setTimeout(() => {
@@ -1221,6 +1234,23 @@ export class StreamService {
         
         log('🔍 Found failed autostart stream %s that needs recovery', streamId);
         this.handleStreamFailure(streamId, null, 'monitoring');
+      }
+      
+      // Check for streams that are stuck with extreme speeds for too long
+      if (stream && stream.status === 'running') {
+        const speedValue = this.parseSpeedValue(stream.stats.speed);
+        const timeSinceStart = now.getTime() - stream.startTime.getTime();
+        
+        // If stream has been running for more than 2 minutes with extreme speed, force stop it
+        if (speedValue > 10 && timeSinceStart > 120000) { // 2 minutes
+          log('🚨 Stream %s has been stuck with extreme speed %s for %dms - forcing stop', 
+              streamId, stream.stats.speed, timeSinceStart);
+          
+          // Force stop the stuck stream
+          this.stopStream(streamId).catch(error => {
+            log('❌ Failed to force stop stuck stream %s:', streamId, error);
+          });
+        }
       }
     }
   }
