@@ -648,6 +648,12 @@ export class StreamService {
             if (timeSinceLastFrame > 30000) { // 30 seconds with same frame
               log('🚨 Stream %s FRAME STUCK - frame=%d for %dms', stream.id, currentFrame, timeSinceLastFrame);
               (stream as any).frameStuckCount = ((stream as any).frameStuckCount || 0) + 1;
+              
+              // Immediate restart for severely stuck frames (>2 minutes)
+              if (timeSinceLastFrame > 120000) { // 2 minutes
+                log('🚨 Stream %s SEVERELY STUCK FRAME - frame=%d for %dms - Triggering immediate restart!', stream.id, currentFrame, timeSinceLastFrame);
+                this.handleImmediateRestart(stream.id, `Severely stuck frame: ${currentFrame} for ${Math.round(timeSinceLastFrame/1000)}s`);
+              }
             }
           } else {
             // Frame count advanced, reset stuck counter
@@ -694,6 +700,14 @@ export class StreamService {
           if (speedValue > 10) { // Speed > 10x is definitely abnormal
             log('🚨 Stream %s ABNORMAL SPEED - speed=%s (parsed: %s)', stream.id, speedMatch[1], speedValue);
             (stream as any).abnormalSpeedCount = ((stream as any).abnormalSpeedCount || 0) + 1;
+            
+            // Immediate restart for extreme speed values (>50x)
+            if (speedValue > 2) {
+              log('🚨 Stream %s EXTREME SPEED - speed=%s (parsed: %s) - Triggering immediate restart!', stream.id, speedMatch[1], speedValue);
+              
+              // Trigger immediate restart for extreme speeds
+              this.handleImmediateRestart(stream.id, `Extreme speed: ${speedValue}x`);
+            }
           } else {
             (stream as any).abnormalSpeedCount = 0;
           }
@@ -1061,6 +1075,31 @@ export class StreamService {
       
       throw error;
     }
+  }
+
+  // Handle immediate restart for extreme conditions
+  private handleImmediateRestart(streamId: string, reason: string): void {
+    const stream = this.activeStreams.get(streamId);
+    if (!stream || stream.status !== 'running') {
+      return;
+    }
+    
+    // Check if we've restarted recently (prevent rapid restarts)
+    const lastRestartTime = (stream as any).lastRestartTime || 0;
+    const timeSinceLastRestart = Date.now() - lastRestartTime;
+    
+    if (timeSinceLastRestart < 60000) { // 1 minute cooldown
+      log('⏰ Stream %s immediate restart skipped - too soon since last restart (%dms ago)', streamId, timeSinceLastRestart);
+      return;
+    }
+    
+    log('🚨 Stream %s IMMEDIATE RESTART - Reason: %s', streamId, reason);
+    (stream as any).lastRestartTime = Date.now();
+    
+    // Restart the stream immediately
+    this.restartStream(streamId).catch(error => {
+      log('❌ Failed to immediately restart stream %s:', streamId, error);
+    });
   }
 
   // Handle stream failure and trigger recovery for autostart streams
