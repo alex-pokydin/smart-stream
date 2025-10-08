@@ -631,6 +631,31 @@ export class StreamService {
     const lines = output.split('\n');
     
     for (const line of lines) {
+      // Parse frame count - this is crucial for detecting stuck streams
+      if (line.includes('frame=')) {
+        const frameMatch = line.match(/frame=\s*(\d+)/);
+        if (frameMatch && frameMatch[1]) {
+          const currentFrame = parseInt(frameMatch[1]);
+          const lastFrame = (stream as any).lastFrameCount || 0;
+          
+          // Store frame count and timestamp for monitoring
+          (stream as any).lastFrameCount = currentFrame;
+          (stream as any).lastFrameTime = Date.now();
+          
+          // Check if frame count is stuck (same frame for too long)
+          if (currentFrame === lastFrame && lastFrame > 0) {
+            const timeSinceLastFrame = Date.now() - ((stream as any).lastFrameTime || Date.now());
+            if (timeSinceLastFrame > 30000) { // 30 seconds with same frame
+              log('🚨 Stream %s FRAME STUCK - frame=%d for %dms', stream.id, currentFrame, timeSinceLastFrame);
+              (stream as any).frameStuckCount = ((stream as any).frameStuckCount || 0) + 1;
+            }
+          } else {
+            // Frame count advanced, reset stuck counter
+            (stream as any).frameStuckCount = 0;
+          }
+        }
+      }
+      
       if (line.includes('fps=')) {
         const fpsMatch = line.match(/fps=\s*(\d+(?:\.\d+)?)/);
         if (fpsMatch && fpsMatch[1]) {
@@ -663,6 +688,15 @@ export class StreamService {
         const speedMatch = line.match(/speed=\s*(\S+)/);
         if (speedMatch && speedMatch[1]) {
           stream.stats.speed = speedMatch[1];
+          
+          // Check for abnormal speed values immediately
+          const speedValue = this.parseSpeedValue(speedMatch[1]);
+          if (speedValue > 10) { // Speed > 10x is definitely abnormal
+            log('🚨 Stream %s ABNORMAL SPEED - speed=%s (parsed: %s)', stream.id, speedMatch[1], speedValue);
+            (stream as any).abnormalSpeedCount = ((stream as any).abnormalSpeedCount || 0) + 1;
+          } else {
+            (stream as any).abnormalSpeedCount = 0;
+          }
         }
       }
     }
@@ -705,12 +739,33 @@ export class StreamService {
       // Parse speed value (e.g., "116x" -> 116)
       const speedValue = this.parseSpeedValue(stream.stats.speed);
       
-      // Check for stream failure conditions: FPS < 7 OR speed > 2x
-      const isFailed = stream.stats.fps < 7 || speedValue > 2;
+      // Enhanced failure detection
+      const frameStuckCount = (stream as any).frameStuckCount || 0;
+      const abnormalSpeedCount = (stream as any).abnormalSpeedCount || 0;
+      const lastFrameCount = (stream as any).lastFrameCount || 0;
+      const lastFrameTime = (stream as any).lastFrameTime || 0;
       
+      // Check for various failure conditions
+      const isLowFps = stream.stats.fps < 7;
+      const isHighSpeed = speedValue > 2; // Lowered threshold from 2x to 5x for more sensitivity
+      const isFrameStuck = frameStuckCount > 2; // Frame stuck for multiple checks
+      const isAbnormalSpeed = abnormalSpeedCount > 3; // Abnormal speed for multiple checks
+      const isNoProgress = timeSinceLastProgress > 60000; // No progress for 1 minute
+      const isFrameNotAdvancing = lastFrameCount > 0 && (currentTime - lastFrameTime) > 60000; // Frame not advancing for 1 minute
+      
+      // Determine if stream has failed
+      const isFailed = isLowFps || isHighSpeed || isFrameStuck || isAbnormalSpeed || isNoProgress || isFrameNotAdvancing;
+      
+      // Log detailed failure analysis
       if (isFailed && timeSinceLastRestart > 300000) { // 5 minute cooldown between restarts
-        log('🚨 Stream %s FAILED - FPS: %s, Speed: %s (parsed: %s) - Restarting...', 
-            stream.id, stream.stats.fps, stream.stats.speed, speedValue);
+        log('🚨 Stream %s FAILED - Analysis:', stream.id);
+        log('  - FPS: %s (low: %s)', stream.stats.fps, isLowFps);
+        log('  - Speed: %s (parsed: %s, high: %s)', stream.stats.speed, speedValue, isHighSpeed);
+        log('  - Frame stuck count: %d (stuck: %s)', frameStuckCount, isFrameStuck);
+        log('  - Abnormal speed count: %d (abnormal: %s)', abnormalSpeedCount, isAbnormalSpeed);
+        log('  - No progress for: %dms (no progress: %s)', timeSinceLastProgress, isNoProgress);
+        log('  - Frame not advancing: %s (stuck: %s)', isFrameNotAdvancing ? 'YES' : 'NO', isFrameNotAdvancing);
+        log('  - Last frame: %d, time since: %dms', lastFrameCount, currentTime - lastFrameTime);
         
         lastRestartTime = currentTime;
         
@@ -720,6 +775,15 @@ export class StreamService {
         });
         
         return; // Exit this monitoring cycle as stream is being restarted
+      }
+      
+      // Log warning conditions (not yet failed, but concerning)
+      if (speedValue > 2 && speedValue <= 5) {
+        log('⚠️ Stream %s HIGH SPEED WARNING - speed=%s (parsed: %s)', stream.id, stream.stats.speed, speedValue);
+      }
+      
+      if (frameStuckCount > 0 && frameStuckCount <= 2) {
+        log('⚠️ Stream %s FRAME STUCK WARNING - frame=%d, stuck count: %d', stream.id, lastFrameCount, frameStuckCount);
       }
       
       // Only log progress every 2 minutes when streaming is working fine
