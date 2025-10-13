@@ -184,6 +184,10 @@ export class StreamService {
         log('Stream %s heartbeat timer cleared', streamId);
       }
       
+      // Clear any restart flags before removing from activeStreams
+      (stream as any).restartInProgress = false;
+      (stream as any).isBeingRestarted = false;
+      
       this.activeStreams.delete(streamId);
       
       log('Stream %s stopped successfully', streamId);
@@ -634,6 +638,11 @@ export class StreamService {
   }
 
   private parseFFmpegProgress(stream: ActiveStream, output: string): void {
+    // Skip processing if stream is being restarted to prevent race conditions
+    if ((stream as any).isBeingRestarted) {
+      return;
+    }
+    
     // Parse FFmpeg progress from stderr
     // This is a simplified parser - you might want to use ffmpeg-progress-stream
     const lines = output.split('\n');
@@ -711,6 +720,12 @@ export class StreamService {
             
             // Immediate restart for extreme speed values (>2x with your current setting)
             if (speedValue > 2) {
+              // Check if stream is already being restarted to prevent multiple triggers
+              if ((stream as any).isBeingRestarted) {
+                log('⏰ Stream %s speed detection skipped - stream is already being restarted', stream.id);
+                return;
+              }
+              
               // Check if we've already triggered a restart recently to prevent spam
               const lastRestartTrigger = (stream as any).lastRestartTrigger || 0;
               const timeSinceLastTrigger = Date.now() - lastRestartTrigger;
@@ -752,6 +767,11 @@ export class StreamService {
     const monitorInterval = setInterval(() => {
       if (stream.status !== 'running' || stream.process.killed) {
         clearInterval(monitorInterval);
+        return;
+      }
+      
+      // Skip monitoring if stream is being restarted to prevent race conditions
+      if ((stream as any).isBeingRestarted) {
         return;
       }
       
@@ -1128,6 +1148,9 @@ export class StreamService {
     (stream as any).lastRestartTime = Date.now();
     (stream as any).restartInProgress = true;
     
+    // Mark stream as being restarted to prevent further speed detection triggers
+    (stream as any).isBeingRestarted = true;
+    
     // Restart the stream immediately
     this.restartStream(streamId).then(() => {
       log('✅ Stream %s immediate restart completed successfully', streamId);
@@ -1139,7 +1162,11 @@ export class StreamService {
       });
     }).finally(() => {
       // Clear the restart in progress flag
-      (stream as any).restartInProgress = false;
+      const currentStream = this.activeStreams.get(streamId);
+      if (currentStream) {
+        (currentStream as any).restartInProgress = false;
+        (currentStream as any).isBeingRestarted = false;
+      }
     });
   }
 
