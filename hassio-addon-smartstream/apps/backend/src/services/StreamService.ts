@@ -726,6 +726,12 @@ export class StreamService {
                 return;
               }
               
+              // Check if restart is already in progress
+              if ((stream as any).restartInProgress) {
+                log('⏰ Stream %s speed detection skipped - restart already in progress', stream.id);
+                return;
+              }
+              
               // Check if we've already triggered a restart recently to prevent spam
               const lastRestartTrigger = (stream as any).lastRestartTrigger || 0;
               const timeSinceLastTrigger = Date.now() - lastRestartTrigger;
@@ -733,6 +739,9 @@ export class StreamService {
               if (timeSinceLastTrigger > 5000) { // 5 second debounce
                 log('🚨 Stream %s EXTREME SPEED - speed=%s (parsed: %s) - Triggering immediate restart!', stream.id, speedMatch[1], speedValue);
                 (stream as any).lastRestartTrigger = Date.now();
+                
+                // Set the flag immediately to prevent other speed detection triggers
+                (stream as any).isBeingRestarted = true;
                 
                 // Trigger immediate restart for extreme speeds
                 this.handleImmediateRestart(stream.id, `Extreme speed: ${speedValue}x`);
@@ -1147,9 +1156,6 @@ export class StreamService {
     
     (stream as any).lastRestartTime = Date.now();
     (stream as any).restartInProgress = true;
-    
-    // Mark stream as being restarted to prevent further speed detection triggers
-    (stream as any).isBeingRestarted = true;
     
     // Restart the stream immediately
     this.restartStream(streamId).then(() => {
