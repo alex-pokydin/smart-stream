@@ -29,9 +29,14 @@ export class StreamService {
       log('FFmpeg version: %s', ffmpegInstaller.version);
       
       // Clean up any orphaned FFmpeg processes from previous sessions
-      log('Checking for orphaned FFmpeg processes...');
+      log('🧹 Checking for orphaned FFmpeg processes from previous sessions...');
       try {
-        await this.cleanupOrphanedProcesses();
+        const cleanupResult = await this.cleanupOrphanedProcesses();
+        if (cleanupResult.killed > 0) {
+          log('✅ Auto-cleanup on startup: Killed %d orphaned process(es)', cleanupResult.killed);
+        } else {
+          log('✅ No orphaned processes found on startup');
+        }
       } catch (error) {
         log('⚠️ Failed to clean up orphaned processes:', error);
       }
@@ -50,7 +55,7 @@ export class StreamService {
         log('Network diagnostics failed:', error);
       }
       
-      // Start the autostart stream recovery monitoring
+      // Start the autostart stream recovery monitoring (includes orphaned process cleanup)
       this.startRecoveryMonitoring();
       
       log('Stream service initialized successfully');
@@ -722,40 +727,60 @@ export class StreamService {
           
           // Check for abnormal speed values immediately
           const speedValue = this.parseSpeedValue(speedMatch[1]);
+          
+          // Log speed detection for transparency
+          if (speedValue > 2) {
+            log('🔍 Stream %s SPEED DETECTED - speed=%s (parsed value: %sx)', stream.id, speedMatch[1], speedValue);
+          }
+          
           if (speedValue > 10) { // Speed > 10x is definitely abnormal
-            log('🚨 Stream %s ABNORMAL SPEED - speed=%s (parsed: %s)', stream.id, speedMatch[1], speedValue);
+            log('🚨 Stream %s ABNORMAL SPEED - speed=%s (parsed: %sx)', stream.id, speedMatch[1], speedValue);
             (stream as any).abnormalSpeedCount = ((stream as any).abnormalSpeedCount || 0) + 1;
+          }
+          
+          // Immediate restart for extreme speed values (>2x threshold)
+          if (speedValue > 2) {
+            log('⚡ Stream %s speed %sx EXCEEDS THRESHOLD (2x) - Checking restart conditions...', stream.id, speedValue);
             
-            // Immediate restart for extreme speed values (>2x with your current setting)
-            if (speedValue > 2) {
-              // Check if stream is already being restarted to prevent multiple triggers
-              if ((stream as any).isBeingRestarted) {
-                log('⏰ Stream %s speed detection skipped - stream is already being restarted', stream.id);
-                return;
-              }
+            // Check if stream is already being restarted to prevent multiple triggers
+            if ((stream as any).isBeingRestarted) {
+              log('❌ Stream %s restart BLOCKED - isBeingRestarted flag is TRUE', stream.id);
+              return;
+            } else {
+              log('✅ Stream %s isBeingRestarted check PASSED (flag is FALSE)', stream.id);
+            }
+            
+            // Check if restart is already in progress
+            if ((stream as any).restartInProgress) {
+              log('❌ Stream %s restart BLOCKED - restartInProgress flag is TRUE', stream.id);
+              return;
+            } else {
+              log('✅ Stream %s restartInProgress check PASSED (flag is FALSE)', stream.id);
+            }
+            
+            // Check if we've already triggered a restart recently to prevent spam
+            const lastRestartTrigger = (stream as any).lastRestartTrigger || 0;
+            const timeSinceLastTrigger = Date.now() - lastRestartTrigger;
+            
+            log('📊 Stream %s restart timing - last trigger: %dms ago (threshold: 5000ms)', stream.id, timeSinceLastTrigger);
+            
+            if (timeSinceLastTrigger > 5000) { // 5 second debounce
+              log('✅ Stream %s debounce check PASSED - enough time since last trigger', stream.id);
+              log('🚨 Stream %s EXTREME SPEED DETECTED - speed=%s (parsed: %sx) - TRIGGERING IMMEDIATE RESTART!', stream.id, speedMatch[1], speedValue);
               
-              // Check if restart is already in progress
-              if ((stream as any).restartInProgress) {
-                log('⏰ Stream %s speed detection skipped - restart already in progress', stream.id);
-                return;
-              }
+              (stream as any).lastRestartTrigger = Date.now();
               
-              // Check if we've already triggered a restart recently to prevent spam
-              const lastRestartTrigger = (stream as any).lastRestartTrigger || 0;
-              const timeSinceLastTrigger = Date.now() - lastRestartTrigger;
+              // Set the flag immediately to prevent other speed detection triggers
+              log('🔒 Stream %s setting isBeingRestarted flag to TRUE', stream.id);
+              (stream as any).isBeingRestarted = true;
               
-              if (timeSinceLastTrigger > 5000) { // 5 second debounce
-                log('🚨 Stream %s EXTREME SPEED - speed=%s (parsed: %s) - Triggering immediate restart!', stream.id, speedMatch[1], speedValue);
-                (stream as any).lastRestartTrigger = Date.now();
-                
-                // Set the flag immediately to prevent other speed detection triggers
-                (stream as any).isBeingRestarted = true;
-                
-                // Trigger immediate restart for extreme speeds
-                this.handleImmediateRestart(stream.id, `Extreme speed: ${speedValue}x`);
-              }
+              // Trigger immediate restart for extreme speeds
+              this.handleImmediateRestart(stream.id, `Extreme speed: ${speedValue}x`);
+            } else {
+              log('❌ Stream %s restart BLOCKED - debounce active (only %dms since last trigger, need 5000ms)', stream.id, timeSinceLastTrigger);
             }
           } else {
+            // Normal speed, reset counter
             (stream as any).abnormalSpeedCount = 0;
           }
         }
@@ -1131,39 +1156,59 @@ export class StreamService {
 
   // Handle immediate restart for extreme conditions
   private handleImmediateRestart(streamId: string, reason: string): void {
+    log('🔔 handleImmediateRestart CALLED for stream %s - Reason: %s', streamId, reason);
+    
     const stream = this.activeStreams.get(streamId);
     if (!stream) {
-      log('⏰ Stream %s immediate restart skipped - stream not found in activeStreams', streamId);
+      log('❌ Stream %s immediate restart ABORTED - stream not found in activeStreams', streamId);
       return;
     }
+    log('✅ Stream %s found in activeStreams', streamId);
     
     if (stream.status !== 'running') {
-      log('⏰ Stream %s immediate restart skipped - stream not running (status: %s)', streamId, stream.status);
+      log('❌ Stream %s immediate restart ABORTED - stream not running (status: %s)', streamId, stream.status);
       return;
     }
+    log('✅ Stream %s status is running', streamId);
     
     // Check if restart is already in progress
     if ((stream as any).restartInProgress) {
-      log('⏰ Stream %s immediate restart skipped - restart already in progress', streamId);
+      log('❌ Stream %s immediate restart ABORTED - restartInProgress flag is TRUE', streamId);
       return;
     }
+    log('✅ Stream %s restartInProgress check passed (flag is FALSE)', streamId);
     
     // Check if we've restarted recently (prevent rapid restarts)
     const lastRestartTime = (stream as any).lastRestartTime || 0;
     const timeSinceLastRestart = Date.now() - lastRestartTime;
     
-    if (timeSinceLastRestart < 30000) { // 30 second cooldown (reduced from 1 minute)
-      log('⏰ Stream %s immediate restart skipped - too soon since last restart (%dms ago)', streamId, timeSinceLastRestart);
+    log('📊 Stream %s restart cooldown check - last restart: %dms ago (threshold: 30000ms)', streamId, timeSinceLastRestart);
+    
+    if (timeSinceLastRestart < 30000) { // 30 second cooldown
+      log('❌ Stream %s immediate restart ABORTED - cooldown active (only %dms since last restart)', streamId, timeSinceLastRestart);
       return;
     }
+    log('✅ Stream %s cooldown check passed', streamId);
     
-    log('🚨 Stream %s IMMEDIATE RESTART INITIATED - Reason: %s', streamId, reason);
-    log('🚨 Stream %s restart details - FPS: %s, Speed: %s, Size: %s, Duration: %dms', 
-        streamId, stream.stats.fps, stream.stats.speed, stream.stats.size, 
-        Date.now() - stream.startTime.getTime());
+    log('');
+    log('═══════════════════════════════════════════════════════════');
+    log('🚨 Stream %s IMMEDIATE RESTART INITIATED', streamId);
+    log('═══════════════════════════════════════════════════════════');
+    log('Reason: %s', reason);
+    log('Current Stats:');
+    log('  - FPS: %s', stream.stats.fps);
+    log('  - Speed: %s', stream.stats.speed);
+    log('  - Size: %s', stream.stats.size);
+    log('  - Time: %s', stream.stats.time);
+    log('  - Duration: %dms (%s)', Date.now() - stream.startTime.getTime(), Math.round((Date.now() - stream.startTime.getTime()) / 60000) + ' minutes');
+    log('═══════════════════════════════════════════════════════════');
+    log('');
     
     (stream as any).lastRestartTime = Date.now();
     (stream as any).restartInProgress = true;
+    
+    log('🔒 Stream %s flags set - restartInProgress: TRUE, lastRestartTime: %d', streamId, Date.now());
+    log('🔄 Stream %s calling restartStream()...', streamId);
     
     // Restart the stream immediately
     this.restartStream(streamId).then(() => {
@@ -1176,10 +1221,14 @@ export class StreamService {
       });
     }).finally(() => {
       // Clear the restart in progress flag
+      log('🔓 Stream %s clearing restart flags...', streamId);
       const currentStream = this.activeStreams.get(streamId);
       if (currentStream) {
         (currentStream as any).restartInProgress = false;
         (currentStream as any).isBeingRestarted = false;
+        log('✅ Stream %s flags cleared - restartInProgress: FALSE, isBeingRestarted: FALSE', streamId);
+      } else {
+        log('⚠️ Stream %s not found when clearing flags (stream may have been removed)', streamId);
       }
     });
   }
@@ -1251,14 +1300,15 @@ export class StreamService {
     }
   }
 
-  // Start recovery monitoring for autostart streams
+  // Start recovery monitoring for autostart streams and orphaned process cleanup
   private startRecoveryMonitoring(): void {
-    // Check every 30 seconds for failed autostart streams that might need recovery
+    // Check every 30 seconds for failed autostart streams and orphaned processes
     this.recoveryInterval = setInterval(() => {
       this.checkFailedAutostartStreams();
+      this.autoCleanupOrphanedProcesses();
     }, 30000);
     
-    log('🔄 Started autostart stream recovery monitoring');
+    log('🔄 Started autostart stream recovery and orphaned process monitoring (every 30s)');
   }
 
   // Check for failed autostart streams that need recovery
@@ -1293,6 +1343,31 @@ export class StreamService {
           });
         }
       }
+    }
+  }
+
+  // Automatically cleanup orphaned processes (runs periodically)
+  private async autoCleanupOrphanedProcesses(): Promise<void> {
+    try {
+      const allProcesses = await this.getAllFFmpegProcesses();
+      const orphanedProcesses = allProcesses.filter(p => !p.tracked);
+      
+      if (orphanedProcesses.length > 0) {
+        log('🧹 AUTO-CLEANUP: Detected %d orphaned FFmpeg process(es)', orphanedProcesses.length);
+        
+        for (const proc of orphanedProcesses) {
+          log('🧹 AUTO-CLEANUP: Orphaned process PID %d, Runtime: %s, Command: %s', 
+              proc.pid, proc.runtime || 'unknown', proc.cmd.substring(0, 80));
+        }
+        
+        const cleanupResult = await this.cleanupOrphanedProcesses();
+        
+        if (cleanupResult.killed > 0) {
+          log('✅ AUTO-CLEANUP: Successfully killed %d orphaned process(es)', cleanupResult.killed);
+        }
+      }
+    } catch (error) {
+      log('❌ AUTO-CLEANUP: Failed to cleanup orphaned processes:', (error as Error).message);
     }
   }
 
