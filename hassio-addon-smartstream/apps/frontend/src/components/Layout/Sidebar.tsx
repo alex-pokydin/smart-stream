@@ -3,7 +3,7 @@ import {
   LayoutDashboard, 
   Camera, 
   Settings, 
-  FileText,
+  Bug,
   Activity
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -24,7 +24,7 @@ const navigation: NavItem[] = [
   { name: 'Cameras', href: '/cameras', icon: Camera },
   { name: 'Streams', href: '/streams', icon: Activity },
   { name: 'Settings', href: '/settings', icon: Settings },
-  { name: 'Logs', href: '/logs', icon: FileText },
+  { name: 'Debug', href: '/debug', icon: Bug },
 ];
 
 export default function Sidebar({ currentPath }: SidebarProps) {

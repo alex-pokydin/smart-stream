@@ -12,12 +12,9 @@ import {
   EyeOff,
   RefreshCw,
   BarChart3,
-  Bug,
-  Trash2,
-  Terminal,
-  Cpu,
-  HardDrive
+  Bug
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { streamService, cameraService } from '../services/api';
 import { StreamStatus } from '@smart-stream/shared';
 
@@ -47,28 +44,6 @@ const Streams: React.FC = () => {
   const [showDiagnostics, setShowDiagnostics] = useState<Record<string, boolean>>({});
   const [diagnostics, setDiagnostics] = useState<Record<string, any>>({});
   const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
-  const [showDebugPanel, setShowDebugPanel] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<{
-    trackedStreams: { id: string; pid: number | undefined; status: string }[];
-    allFFmpegProcesses: { 
-      pid: number; 
-      cmd: string; 
-      tracked: boolean;
-      cpu?: number;
-      memory?: number;
-      runtime?: string;
-    }[];
-    orphanedCount: number;
-    resourceUsage: {
-      totalCpu: number;
-      totalMemory: number;
-      ffmpegCpu: number;
-      ffmpegMemory: number;
-      processCount: number;
-    };
-  } | null>(null);
-  const [debugLoading, setDebugLoading] = useState(false);
-  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   // Load streams and cameras
   const loadData = async () => {
@@ -148,59 +123,6 @@ const Streams: React.FC = () => {
     }
   };
 
-  // Load debug info
-  const loadDebugInfo = async () => {
-    try {
-      setDebugLoading(true);
-      const info = await streamService.getProcessDebugInfo();
-      setDebugInfo(info);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load debug info');
-    } finally {
-      setDebugLoading(false);
-    }
-  };
-
-  // Toggle debug panel
-  const toggleDebugPanel = async () => {
-    const newState = !showDebugPanel;
-    setShowDebugPanel(newState);
-    
-    if (newState) {
-      await loadDebugInfo();
-    }
-  };
-
-  // Cleanup orphaned processes
-  const handleCleanup = async () => {
-    try {
-      setCleanupLoading(true);
-      const result = await streamService.cleanupOrphanedProcesses();
-      
-      // Refresh debug info after cleanup
-      await loadDebugInfo();
-      
-      // Show success message
-      if (result.killed > 0) {
-        alert(`Successfully cleaned up ${result.killed} orphaned FFmpeg process(es)`);
-      } else {
-        alert('No orphaned processes found');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cleanup orphaned processes');
-    } finally {
-      setCleanupLoading(false);
-    }
-  };
-
-  // Auto-refresh debug info when panel is open
-  useEffect(() => {
-    if (showDebugPanel) {
-      const interval = setInterval(loadDebugInfo, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [showDebugPanel]);
-
   // Get status icon and color
   const getStatusDisplay = (status: StreamStatus['status']) => {
     switch (status) {
@@ -274,22 +196,13 @@ const Streams: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          <button
-            onClick={toggleDebugPanel}
-            className={`flex items-center space-x-2 px-4 py-2 border rounded-md transition-colors ${
-              showDebugPanel 
-                ? 'bg-blue-50 border-blue-300 text-blue-700' 
-                : 'bg-white border-gray-300 hover:bg-gray-50'
-            }`}
+          <Link
+            to="/debug"
+            className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
           >
             <Bug className="h-4 w-4" />
             <span>Debug</span>
-            {debugInfo && debugInfo.orphanedCount > 0 && (
-              <span className="px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                {debugInfo.orphanedCount}
-              </span>
-            )}
-          </button>
+          </Link>
           <button
             onClick={loadData}
             disabled={loading}
@@ -357,204 +270,6 @@ const Streams: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Debug Panel */}
-      {showDebugPanel && (
-        <div className="bg-white rounded-lg border-2 border-blue-300 overflow-hidden">
-          <div className="bg-blue-50 p-4 border-b border-blue-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Terminal className="h-5 w-5 text-blue-600" />
-                <div>
-                  <h3 className="font-medium text-gray-900">Process Debug Information</h3>
-                  <p className="text-sm text-gray-600">
-                    Monitor all FFmpeg processes and detect orphaned streams
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleCleanup}
-                disabled={cleanupLoading || (debugInfo?.orphanedCount === 0)}
-                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>{cleanupLoading ? 'Cleaning...' : 'Cleanup Orphaned'}</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="p-4">
-            {debugLoading && !debugInfo ? (
-              <div className="flex items-center justify-center py-8">
-                <RefreshCw className="h-5 w-5 animate-spin text-blue-600 mr-2" />
-                <span className="text-gray-600">Loading debug info...</span>
-              </div>
-            ) : debugInfo ? (
-              <div className="space-y-4">
-                {/* Resource Usage Summary */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Cpu className="h-4 w-4 text-blue-600" />
-                      <p className="text-sm font-medium text-gray-600">System CPU</p>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{debugInfo.resourceUsage.totalCpu}%</p>
-                  </div>
-                  <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <HardDrive className="h-4 w-4 text-purple-600" />
-                      <p className="text-sm font-medium text-gray-600">System Memory</p>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{debugInfo.resourceUsage.totalMemory}%</p>
-                  </div>
-                  <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Cpu className="h-4 w-4 text-orange-600" />
-                      <p className="text-sm font-medium text-gray-600">FFmpeg CPU</p>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{debugInfo.resourceUsage.ffmpegCpu}%</p>
-                  </div>
-                  <div className="bg-pink-50 p-3 rounded-lg border border-pink-200">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <HardDrive className="h-4 w-4 text-pink-600" />
-                      <p className="text-sm font-medium text-gray-600">FFmpeg Memory</p>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{debugInfo.resourceUsage.ffmpegMemory}%</p>
-                  </div>
-                </div>
-
-                {/* Process Count Summary */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm font-medium text-gray-600">Total FFmpeg Processes</p>
-                    <p className="text-2xl font-bold text-gray-900">{debugInfo.allFFmpegProcesses.length}</p>
-                  </div>
-                  <div className="bg-green-50 p-3 rounded-lg">
-                    <p className="text-sm font-medium text-gray-600">Tracked Streams</p>
-                    <p className="text-2xl font-bold text-green-900">{debugInfo.trackedStreams.length}</p>
-                  </div>
-                  <div className="bg-red-50 p-3 rounded-lg">
-                    <p className="text-sm font-medium text-gray-600">Orphaned Processes</p>
-                    <p className="text-2xl font-bold text-red-900">{debugInfo.orphanedCount}</p>
-                  </div>
-                </div>
-
-                {/* Process List */}
-                {debugInfo.allFFmpegProcesses.length > 0 ? (
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-3">All FFmpeg Processes</h4>
-                    <div className="space-y-2">
-                      {debugInfo.allFFmpegProcesses.map((proc, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded-lg border ${
-                            proc.tracked
-                              ? 'bg-green-50 border-green-200'
-                              : 'bg-red-50 border-red-300'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-1">
-                                <span className={`px-2 py-1 text-xs font-medium rounded ${
-                                  proc.tracked
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-red-100 text-red-800'
-                                }`}>
-                                  {proc.tracked ? 'Tracked' : 'Orphaned'}
-                                </span>
-                                <span className="font-mono text-sm font-medium text-gray-900">
-                                  PID: {proc.pid}
-                                </span>
-                                {proc.runtime && (
-                                  <span className="text-xs text-gray-500">
-                                    Runtime: {proc.runtime}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs font-mono text-gray-600 break-all">
-                                {proc.cmd}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          {/* Resource Usage */}
-                          {(proc.cpu !== undefined || proc.memory !== undefined) && (
-                            <div className="flex items-center space-x-4 pt-2 border-t border-gray-200">
-                              {proc.cpu !== undefined && (
-                                <div className="flex items-center space-x-1">
-                                  <Cpu className="h-3 w-3 text-gray-500" />
-                                  <span className={`text-xs font-medium ${
-                                    proc.cpu > 50 ? 'text-red-600' : 
-                                    proc.cpu > 20 ? 'text-orange-600' : 
-                                    'text-gray-600'
-                                  }`}>
-                                    CPU: {proc.cpu}%
-                                  </span>
-                                </div>
-                              )}
-                              {proc.memory !== undefined && (
-                                <div className="flex items-center space-x-1">
-                                  <HardDrive className="h-3 w-3 text-gray-500" />
-                                  <span className="text-xs font-medium text-gray-600">
-                                    Memory: {proc.memory}%
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Terminal className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-600">No FFmpeg processes running</p>
-                  </div>
-                )}
-
-                {/* Tracked Streams Details */}
-                {debugInfo.trackedStreams.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-3">Tracked Stream Details</h4>
-                    <div className="space-y-2">
-                      {debugInfo.trackedStreams.map((stream, idx) => (
-                        <div key={idx} className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-gray-900">{stream.id}</p>
-                              <p className="text-sm text-gray-600">
-                                PID: {stream.pid || 'N/A'} • Status: {stream.status}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Warning for orphaned processes */}
-                {debugInfo.orphanedCount > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="flex items-start space-x-3">
-                      <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="font-medium text-red-900">Orphaned Processes Detected</p>
-                        <p className="text-sm text-red-800 mt-1">
-                          {debugInfo.orphanedCount} FFmpeg process(es) are running but not tracked by the application.
-                          These may be leftover from a previous session and should be cleaned up to free system resources.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
 
       {/* Streams List */}
       {streamEntries.length === 0 ? (

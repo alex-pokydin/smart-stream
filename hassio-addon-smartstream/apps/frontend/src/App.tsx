@@ -4,7 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Cameras from './pages/Cameras';
 import Streams from './pages/Streams';
 import Settings from './pages/Settings';
-import Logs from './pages/Logs';
+import Debug from './pages/Debug';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -16,7 +16,9 @@ function App() {
         <Route path="/cameras" element={<Cameras />} />
         <Route path="/streams" element={<Streams />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/logs" element={<Logs />} />
+        <Route path="/debug" element={<Debug />} />
+        {/* Legacy route redirect */}
+        <Route path="/logs" element={<Navigate to="/debug" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>
