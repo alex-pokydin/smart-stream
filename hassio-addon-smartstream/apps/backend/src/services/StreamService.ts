@@ -1614,18 +1614,26 @@ export class StreamService {
       let cmd: string;
       if (platform === 'win32') {
         // Windows: Get process info with CPU and memory
-        cmd = 'wmic process where "name=\'ffmpeg.exe\'" get ProcessId,CommandLine,WorkingSetSize /format:csv';
+        // Match both ffmpeg.exe and full paths containing ffmpeg
+        cmd = 'wmic process where "CommandLine like \'%ffmpeg%\'" get ProcessId,CommandLine,WorkingSetSize /format:csv';
       } else {
         // Unix: ps aux shows CPU%, MEM%, and more
-        cmd = 'ps aux | grep ffmpeg | grep -v grep';
+        // Use broader pattern to catch ffmpeg regardless of full path
+        cmd = 'ps aux | grep -E "(ffmpeg|@ffmpeg-installer)" | grep -v grep';
       }
+      
+      log('Detecting FFmpeg processes with command: %s', cmd);
       
       exec(cmd, (error: any, stdout: string, stderr: string) => {
         if (error && error.code !== 1) { // Exit code 1 means no processes found, which is fine
           log('Error listing FFmpeg processes: %s', error.message);
+          log('stderr: %s', stderr);
           resolve([]);
           return;
         }
+        
+        log('FFmpeg process detection stdout length: %d bytes', stdout.length);
+        log('FFmpeg process detection found %d lines', stdout.split('\n').filter(line => line.trim()).length);
         
         const processes: { 
           pid: number; 
@@ -1660,12 +1668,18 @@ export class StreamService {
               // Parse Unix ps output
               // Format: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
               const parts = line.trim().split(/\s+/);
+              log('Parsing ps line, parts count: %d, line: %s', parts.length, line.substring(0, 100));
+              
               if (parts.length >= 11 && parts[1] && parts[2] && parts[3]) {
                 pid = parseInt(parts[1], 10);
                 cpu = parseFloat(parts[2]);
                 memory = parseFloat(parts[3]);
                 runtime = parts[9]; // TIME column
                 cmdLine = parts.slice(10).join(' ');
+                
+                log('Parsed process - PID: %d, CPU: %s, Memory: %s, Runtime: %s', pid, cpu, memory, runtime);
+              } else {
+                log('Line did not match expected format (expected >=11 parts, got %d)', parts.length);
               }
             }
             
@@ -1693,12 +1707,14 @@ export class StreamService {
               }
               
               processes.push(processInfo);
+              log('Added process to list - PID: %d, tracked: %s', pid, isTracked);
             }
           } catch (parseError) {
-            log('Error parsing FFmpeg process line: %s', line);
+            log('Error parsing FFmpeg process line: %s, error: %s', line, (parseError as Error).message);
           }
         }
         
+        log('Total FFmpeg processes found: %d', processes.length);
         resolve(processes);
       });
     });
