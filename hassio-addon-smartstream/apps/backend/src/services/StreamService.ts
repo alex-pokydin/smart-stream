@@ -1665,21 +1665,36 @@ export class StreamService {
                 }
               }
             } else {
-              // Parse Unix ps output
-              // Format: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+              // Parse Unix ps output - handle multiple formats
               const parts = line.trim().split(/\s+/);
               log('Parsing ps line, parts count: %d, line: %s', parts.length, line.substring(0, 100));
               
-              if (parts.length >= 11 && parts[1] && parts[2] && parts[3]) {
+              // Try to detect format by checking if first part is a number (PID)
+              const firstPartIsNumber = parts[0] && !isNaN(parseInt(parts[0], 10));
+              
+              if (firstPartIsNumber && parts.length >= 4 && parts[0] && parts[2]) {
+                // Busybox/Alpine format: PID USER TIME COMMAND
+                // Example: 164 root 0:01 /app/node_modules/...
+                pid = parseInt(parts[0], 10);
+                // USER is parts[1]
+                runtime = parts[2]; // TIME column
+                cmdLine = parts.slice(3).join(' ');
+                // CPU and memory not available in this format
+                cpu = undefined;
+                memory = undefined;
+                
+                log('Parsed process (busybox format) - PID: %d, Runtime: %s, Command: %s', pid, runtime, cmdLine.substring(0, 50));
+              } else if (parts.length >= 11 && parts[1] && parts[2] && parts[3]) {
+                // Standard ps aux format: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
                 pid = parseInt(parts[1], 10);
                 cpu = parseFloat(parts[2]);
                 memory = parseFloat(parts[3]);
                 runtime = parts[9]; // TIME column
                 cmdLine = parts.slice(10).join(' ');
                 
-                log('Parsed process - PID: %d, CPU: %s, Memory: %s, Runtime: %s', pid, cpu, memory, runtime);
+                log('Parsed process (standard format) - PID: %d, CPU: %s, Memory: %s, Runtime: %s', pid, cpu, memory, runtime);
               } else {
-                log('Line did not match expected format (expected >=11 parts, got %d)', parts.length);
+                log('Line did not match any known format (parts count: %d)', parts.length);
               }
             }
             
