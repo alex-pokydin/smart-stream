@@ -28,6 +28,14 @@ export class StreamService {
       log('FFmpeg binary path: %s', ffmpegInstaller.path);
       log('FFmpeg version: %s', ffmpegInstaller.version);
       
+      // Clean up any orphaned FFmpeg processes from previous sessions
+      log('Checking for orphaned FFmpeg processes...');
+      try {
+        await this.cleanupOrphanedProcesses();
+      } catch (error) {
+        log('⚠️ Failed to clean up orphaned processes:', error);
+      }
+      
       // Run network diagnostics on startup
       log('Running network connectivity diagnostics...');
       try {
@@ -1586,6 +1594,231 @@ export class StreamService {
       log('❌ FFmpeg health check exception: %s', (error as Error).message);
       return false;
     }
+  }
+
+  // Get all running FFmpeg processes with resource usage
+  public async getAllFFmpegProcesses(): Promise<{ 
+    pid: number; 
+    cmd: string; 
+    tracked: boolean;
+    cpu?: number;
+    memory?: number;
+    runtime?: string;
+  }[]> {
+    return new Promise((resolve) => {
+      const { exec } = require('child_process');
+      const os = require('os');
+      const platform = os.platform();
+      
+      // Different command based on platform - include CPU and memory info
+      let cmd: string;
+      if (platform === 'win32') {
+        // Windows: Get process info with CPU and memory
+        cmd = 'wmic process where "name=\'ffmpeg.exe\'" get ProcessId,CommandLine,WorkingSetSize /format:csv';
+      } else {
+        // Unix: ps aux shows CPU%, MEM%, and more
+        cmd = 'ps aux | grep ffmpeg | grep -v grep';
+      }
+      
+      exec(cmd, (error: any, stdout: string, stderr: string) => {
+        if (error && error.code !== 1) { // Exit code 1 means no processes found, which is fine
+          log('Error listing FFmpeg processes: %s', error.message);
+          resolve([]);
+          return;
+        }
+        
+        const processes: { 
+          pid: number; 
+          cmd: string; 
+          tracked: boolean;
+          cpu?: number;
+          memory?: number;
+          runtime?: string;
+        }[] = [];
+        const lines = stdout.split('\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+          try {
+            let pid: number | null = null;
+            let cmdLine = '';
+            let cpu: number | undefined;
+            let memory: number | undefined;
+            let runtime: string | undefined;
+            
+            if (platform === 'win32') {
+              // Parse Windows WMIC output (CSV format)
+              const parts = line.split(',');
+              if (parts.length >= 3 && parts[2]) {
+                cmdLine = parts[1] || '';
+                pid = parseInt(parts[2], 10);
+                // Memory is in bytes, convert to MB
+                if (parts[3]) {
+                  memory = Math.round(parseInt(parts[3], 10) / 1024 / 1024);
+                }
+              }
+            } else {
+              // Parse Unix ps output
+              // Format: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+              const parts = line.trim().split(/\s+/);
+              if (parts.length >= 11 && parts[1] && parts[2] && parts[3]) {
+                pid = parseInt(parts[1], 10);
+                cpu = parseFloat(parts[2]);
+                memory = parseFloat(parts[3]);
+                runtime = parts[9]; // TIME column
+                cmdLine = parts.slice(10).join(' ');
+              }
+            }
+            
+            if (pid && !isNaN(pid)) {
+              // Check if this PID is tracked in our activeStreams
+              const isTracked = Array.from(this.activeStreams.values()).some(
+                stream => stream.process.pid === pid
+              );
+              
+              // Build process object with only defined properties
+              const processInfo: any = { 
+                pid, 
+                cmd: cmdLine.substring(0, 200), 
+                tracked: isTracked
+              };
+              
+              if (cpu !== undefined && !isNaN(cpu)) {
+                processInfo.cpu = cpu;
+              }
+              if (memory !== undefined && !isNaN(memory)) {
+                processInfo.memory = memory;
+              }
+              if (runtime) {
+                processInfo.runtime = runtime;
+              }
+              
+              processes.push(processInfo);
+            }
+          } catch (parseError) {
+            log('Error parsing FFmpeg process line: %s', line);
+          }
+        }
+        
+        resolve(processes);
+      });
+    });
+  }
+
+  // Get detailed resource usage for all processes
+  public async getSystemResourceUsage(): Promise<{
+    totalCpu: number;
+    totalMemory: number;
+    ffmpegCpu: number;
+    ffmpegMemory: number;
+    processCount: number;
+  }> {
+    const os = require('os');
+    const processes = await this.getAllFFmpegProcesses();
+    
+    // Calculate total CPU and memory from all FFmpeg processes
+    const ffmpegCpu = processes.reduce((sum, proc) => sum + (proc.cpu || 0), 0);
+    const ffmpegMemory = processes.reduce((sum, proc) => sum + (proc.memory || 0), 0);
+    
+    // Get system-wide stats
+    const totalMemory = os.totalmem();
+    const freeMemory = os.freemem();
+    const usedMemory = totalMemory - freeMemory;
+    const memoryPercent = (usedMemory / totalMemory) * 100;
+    
+    // Get load average (1 minute) as CPU indicator on Unix-like systems
+    const loadAvg = os.loadavg();
+    const cpuCount = os.cpus().length;
+    const totalCpu = (loadAvg[0] / cpuCount) * 100; // Normalize to percentage
+    
+    return {
+      totalCpu: Math.round(totalCpu * 10) / 10,
+      totalMemory: Math.round(memoryPercent * 10) / 10,
+      ffmpegCpu: Math.round(ffmpegCpu * 10) / 10,
+      ffmpegMemory: Math.round(ffmpegMemory),
+      processCount: processes.length
+    };
+  }
+
+  // Clean up orphaned FFmpeg processes
+  public async cleanupOrphanedProcesses(): Promise<{ killed: number; processes: any[] }> {
+    try {
+      const allProcesses = await this.getAllFFmpegProcesses();
+      const orphanedProcesses = allProcesses.filter(p => !p.tracked);
+      
+      log('Found %d FFmpeg processes total, %d orphaned', allProcesses.length, orphanedProcesses.length);
+      
+      if (orphanedProcesses.length > 0) {
+        log('🧹 Cleaning up orphaned FFmpeg processes...');
+        
+        for (const proc of orphanedProcesses) {
+          try {
+            log('  Killing orphaned process PID %d: %s', proc.pid, proc.cmd.substring(0, 100));
+            process.kill(proc.pid, 'SIGTERM');
+            
+            // Wait a moment for graceful shutdown
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Force kill if still running
+            try {
+              process.kill(proc.pid, 0); // Check if still alive
+              log('  Force killing PID %d', proc.pid);
+              process.kill(proc.pid, 'SIGKILL');
+            } catch {
+              // Process already dead, that's good
+            }
+          } catch (killError) {
+            log('  Failed to kill PID %d: %s', proc.pid, (killError as Error).message);
+          }
+        }
+        
+        log('✅ Orphaned process cleanup complete - killed %d processes', orphanedProcesses.length);
+        return { killed: orphanedProcesses.length, processes: orphanedProcesses };
+      } else {
+        log('✅ No orphaned FFmpeg processes found');
+        return { killed: 0, processes: [] };
+      }
+    } catch (error) {
+      log('❌ Error during orphaned process cleanup: %s', (error as Error).message);
+      throw error;
+    }
+  }
+
+  // Debug method to get process information with resource usage
+  public async getProcessDebugInfo(): Promise<{
+    trackedStreams: { id: string; pid: number | undefined; status: string }[];
+    allFFmpegProcesses: { 
+      pid: number; 
+      cmd: string; 
+      tracked: boolean;
+      cpu?: number;
+      memory?: number;
+      runtime?: string;
+    }[];
+    orphanedCount: number;
+    resourceUsage: {
+      totalCpu: number;
+      totalMemory: number;
+      ffmpegCpu: number;
+      ffmpegMemory: number;
+      processCount: number;
+    };
+  }> {
+    const allProcesses = await this.getAllFFmpegProcesses();
+    const trackedStreams = Array.from(this.activeStreams.entries()).map(([id, stream]) => ({
+      id,
+      pid: stream.process.pid,
+      status: stream.status
+    }));
+    
+    const orphanedCount = allProcesses.filter(p => !p.tracked).length;
+    const resourceUsage = await this.getSystemResourceUsage();
+    
+    return {
+      trackedStreams,
+      allFFmpegProcesses: allProcesses,
+      orphanedCount,
+      resourceUsage
+    };
   }
 }
 

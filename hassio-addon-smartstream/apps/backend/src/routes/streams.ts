@@ -362,5 +362,41 @@ export function createStreamRouter(streaming: StreamService, database: DatabaseS
     }
   });
 
+  // GET /streams/debug/processes - Debug endpoint to list all FFmpeg processes
+  router.get('/debug/processes', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      log('Debug request: listing all FFmpeg processes');
+      const debugInfo = await streaming.getProcessDebugInfo();
+      
+      const response: ApiResponse = {
+        success: true,
+        data: debugInfo,
+        message: `Found ${debugInfo.allFFmpegProcesses.length} total FFmpeg processes, ${debugInfo.orphanedCount} orphaned`
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /streams/debug/cleanup - Manually trigger cleanup of orphaned processes
+  router.post('/debug/cleanup', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      log('Debug request: manual cleanup of orphaned FFmpeg processes');
+      const cleanupResult = await streaming.cleanupOrphanedProcesses();
+      
+      const response: ApiResponse = {
+        success: true,
+        data: cleanupResult,
+        message: `Cleaned up ${cleanupResult.killed} orphaned FFmpeg processes`
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   return router;
 }

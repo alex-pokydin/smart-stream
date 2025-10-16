@@ -178,6 +178,74 @@ export const streamService = {
     const response = await api.post('/streams/test-rtsp', { hostname });
     return response.data;
   },
+
+  async getProcessDebugInfo(): Promise<{
+    trackedStreams: { id: string; pid: number | undefined; status: string }[];
+    allFFmpegProcesses: { 
+      pid: number; 
+      cmd: string; 
+      tracked: boolean;
+      cpu?: number;
+      memory?: number;
+      runtime?: string;
+    }[];
+    orphanedCount: number;
+    resourceUsage: {
+      totalCpu: number;
+      totalMemory: number;
+      ffmpegCpu: number;
+      ffmpegMemory: number;
+      processCount: number;
+    };
+  }> {
+    const response = await api.get<ApiResponse<{
+      trackedStreams: { id: string; pid: number | undefined; status: string }[];
+      allFFmpegProcesses: { 
+        pid: number; 
+        cmd: string; 
+        tracked: boolean;
+        cpu?: number;
+        memory?: number;
+        runtime?: string;
+      }[];
+      orphanedCount: number;
+      resourceUsage: {
+        totalCpu: number;
+        totalMemory: number;
+        ffmpegCpu: number;
+        ffmpegMemory: number;
+        processCount: number;
+      };
+    }>>('/streams/debug/processes');
+    if (!response.data.data) throw new Error('Failed to get process debug info');
+    return response.data.data;
+  },
+
+  async cleanupOrphanedProcesses(): Promise<{
+    killed: number;
+    processes: { 
+      pid: number; 
+      cmd: string; 
+      tracked: boolean;
+      cpu?: number;
+      memory?: number;
+      runtime?: string;
+    }[];
+  }> {
+    const response = await api.post<ApiResponse<{
+      killed: number;
+      processes: { 
+        pid: number; 
+        cmd: string; 
+        tracked: boolean;
+        cpu?: number;
+        memory?: number;
+        runtime?: string;
+      }[];
+    }>>('/streams/debug/cleanup');
+    if (!response.data.data) throw new Error('Failed to cleanup orphaned processes');
+    return response.data.data;
+  },
 };
 
 // Health API
