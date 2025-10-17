@@ -66,6 +66,14 @@ export function createStreamRouter(streaming: StreamService, database: DatabaseS
       try {
         const { hostname, platform, streamKey, config } = req.body as StartStreamRequest;
         
+        // Check for existing streams from this camera and stop them (limit: 1 stream per camera)
+        if (hostname) {
+          const existingStreamCount = await streaming.stopStreamsByCameraId(hostname);
+          if (existingStreamCount > 0) {
+            log('🔄 Stopped %d existing stream(s) for camera %s to enforce 1-stream-per-camera limit', existingStreamCount, hostname);
+          }
+        }
+        
         // Build the input URL from hostname if not provided in config
         let inputUrl = config?.inputUrl;
         if (!inputUrl) {
@@ -132,7 +140,8 @@ export function createStreamRouter(streaming: StreamService, database: DatabaseS
           streamConfig.outputUrl = config.outputUrl;
         }
 
-        const streamStatus = await streaming.startStream(streamConfig);
+        // Pass the hostname as cameraId to track which camera this stream belongs to
+        const streamStatus = await streaming.startStream(streamConfig, false, hostname);
         
         const response: ApiResponse = {
           success: true,

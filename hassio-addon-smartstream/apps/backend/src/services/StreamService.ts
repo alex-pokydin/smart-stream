@@ -96,6 +96,11 @@ export class StreamService {
         }
       };
 
+      // Add cameraId only if provided
+      if (cameraId) {
+        stream.cameraId = cameraId;
+      }
+
       this.activeStreams.set(streamId, stream);
       this.setupProcessHandlers(stream);
       this.setupStreamMonitoring(stream);
@@ -257,6 +262,35 @@ export class StreamService {
     }
 
     return result;
+  }
+
+  public getStreamsByCameraId(cameraId: string): string[] {
+    const streamIds: string[] = [];
+    
+    for (const [id, stream] of this.activeStreams) {
+      if (stream.cameraId === cameraId && (stream.status === 'starting' || stream.status === 'running')) {
+        streamIds.push(id);
+      }
+    }
+
+    return streamIds;
+  }
+
+  public async stopStreamsByCameraId(cameraId: string): Promise<number> {
+    const streamIds = this.getStreamsByCameraId(cameraId);
+    
+    log('Stopping %d existing stream(s) for camera %s', streamIds.length, cameraId);
+    
+    for (const streamId of streamIds) {
+      try {
+        await this.stopStream(streamId);
+        log('✅ Stopped existing stream %s for camera %s', streamId, cameraId);
+      } catch (error) {
+        log('⚠️ Failed to stop stream %s for camera %s: %s', streamId, cameraId, (error as Error).message);
+      }
+    }
+    
+    return streamIds.length;
   }
 
   private generateStreamId(): string {
@@ -1937,4 +1971,5 @@ interface ActiveStream {
   endTime?: Date;
   errorMessage?: string;
   stats: StreamStats;
+  cameraId?: string;
 }
