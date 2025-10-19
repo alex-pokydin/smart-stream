@@ -352,7 +352,7 @@ export function createCameraRouter(
         
         // Format profile information
         const formattedProfiles = profiles.map(profile => ({
-          token: profile.token,
+          token: (profile as any).$.token || profile.token,  // ONVIF stores token in $.token
           name: profile.name,
           resolution: {
             width: profile.videoEncoderConfiguration?.resolution?.width || 0,
@@ -400,11 +400,10 @@ export function createCameraRouter(
           throw new CameraNotFoundError(hostname);
         }
 
-        log('Getting snapshot for camera: %s', hostname);
+        log('Getting snapshot for camera: %s%s', hostname, req.query.profile ? ` (profile: ${req.query.profile})` : '');
         
         // Get profile token from query parameter (optional)
         const profileToken = req.query.profile as string | undefined;
-        log('Requested profile token: %s', profileToken || '(none - using default)');
 
         // Get ONVIF camera instance
         const onvifCamera = await onvif.getCamera({

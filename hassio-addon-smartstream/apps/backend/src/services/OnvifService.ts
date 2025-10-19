@@ -182,9 +182,10 @@ export class OnvifService {
         // Log profile details
         profiles.forEach((profile, idx) => {
           const resolution = profile?.videoEncoderConfiguration?.resolution;
+          const token = (profile as any).$.token || profile?.token || 'unknown';
           log('Profile %d: token=%s, name=%s, resolution=%dx%d', 
             idx, 
-            profile?.token || 'unknown',
+            token,
             profile?.name || 'unknown',
             resolution?.width || 0,
             resolution?.height || 0
@@ -208,14 +209,12 @@ export class OnvifService {
       // Try getSnapshotUri with callback - this is the real ONVIF method
       if (typeof (camera as any).getSnapshotUri === 'function') {
         const options = profileToken ? { profileToken } : {};
-        log('Calling getSnapshotUri with options:', JSON.stringify(options));
         const result = await new Promise<any>((resolve, reject) => {
           (camera as any).getSnapshotUri(options, (err: any, result: any) => {
             if (err) {
               log('getSnapshotUri callback error:', err);
               reject(err);
             } else {
-              log('getSnapshotUri callback result:', JSON.stringify(result, null, 2));
               resolve(result);
             }
           });

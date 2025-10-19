@@ -119,7 +119,7 @@ export const cameraService = {
   getSnapshotUrl(hostname: string, profileToken?: string): string {
     const baseURL = getApiBaseURL();
     const url = `${baseURL}/cameras/${hostname}/snapshot`;
-    return profileToken ? `${url}?profile=${profileToken}` : url;
+    return profileToken ? `${url}?profile=${encodeURIComponent(profileToken)}` : url;
   },
 };
 
