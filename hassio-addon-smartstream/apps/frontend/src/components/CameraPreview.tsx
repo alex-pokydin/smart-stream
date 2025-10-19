@@ -20,7 +20,7 @@ export default function CameraPreview({
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [isPaused, setIsPaused] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
-  const intervalRef = useRef<number | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const snapshotUrl = cameraService.getSnapshotUrl(hostname);
 
