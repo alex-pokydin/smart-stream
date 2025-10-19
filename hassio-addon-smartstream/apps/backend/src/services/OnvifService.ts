@@ -164,7 +164,32 @@ export class OnvifService {
 
   public async getCameraSnapshot(camera: OnvifCamera): Promise<{ uri: string }> {
     try {
-      return await camera.getSnapshotUri();
+      log('Getting snapshot URI from camera');
+      
+      // Try getSnapshotUri with callback - this is the real ONVIF method
+      if (typeof (camera as any).getSnapshotUri === 'function') {
+        const result = await new Promise<any>((resolve, reject) => {
+          (camera as any).getSnapshotUri({}, (err: any, result: any) => {
+            if (err) {
+              log('getSnapshotUri callback error:', err);
+              reject(err);
+            } else {
+              log('getSnapshotUri callback result:', result);
+              resolve(result);
+            }
+          });
+        });
+        
+        // Return the result if it has a uri property
+        if (result && result.uri) {
+          return { uri: result.uri };
+        } else {
+          log('Unexpected getSnapshotUri result format:', result);
+          throw new Error('Invalid snapshot URI response from camera');
+        }
+      }
+      
+      throw new Error('No getSnapshotUri method available on camera object');
     } catch (error) {
       log('Error getting snapshot URI:', error);
       throw error;
