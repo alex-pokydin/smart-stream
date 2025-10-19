@@ -401,6 +401,10 @@ export function createCameraRouter(
         }
 
         log('Getting snapshot for camera: %s', hostname);
+        
+        // Get profile token from query parameter (optional)
+        const profileToken = req.query.profile as string | undefined;
+        log('Requested profile token: %s', profileToken || '(none - using default)');
 
         // Get ONVIF camera instance
         const onvifCamera = await onvif.getCamera({
@@ -409,9 +413,6 @@ export function createCameraRouter(
           username: camera.username,
           password: camera.password
         });
-
-        // Get profile token from query parameter (optional)
-        const profileToken = req.query.profile as string | undefined;
 
         // Get snapshot URI
         const snapshotInfo = await onvif.getCameraSnapshot(onvifCamera, profileToken);

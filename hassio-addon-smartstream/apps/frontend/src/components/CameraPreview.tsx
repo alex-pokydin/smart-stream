@@ -59,6 +59,7 @@ export default function CameraPreview({
     const fetchProfiles = async () => {
       try {
         const result = await cameraService.getProfiles(hostname);
+        console.log('📹 Camera profiles loaded:', result);
         setProfiles(result.profiles);
         // Auto-select the highest resolution profile
         if (result.profiles.length > 0) {
@@ -67,10 +68,11 @@ export default function CameraPreview({
               ? curr 
               : prev
           );
+          console.log('✅ Auto-selected highest resolution profile:', highestRes);
           setSelectedProfile(highestRes.token);
         }
       } catch (err) {
-        console.error('Failed to load camera profiles:', err);
+        console.error('❌ Failed to load camera profiles:', err);
         // Continue without profile selection if it fails
       }
     };
@@ -90,6 +92,8 @@ export default function CameraPreview({
     // Add timestamp to prevent caching
     const separator = snapshotUrl.includes('?') ? '&' : '?';
     const url = `${snapshotUrl}${separator}t=${Date.now()}`;
+    
+    console.log('📸 Loading snapshot:', { selectedProfile, url: url.substring(0, 100) + '...' });
     
     if (imgRef.current) {
       imgRef.current.src = url;
@@ -122,6 +126,7 @@ export default function CameraPreview({
   };
 
   const handleProfileChange = (token: string) => {
+    console.log('🔄 Switching to profile:', token);
     setSelectedProfile(token);
     setShowProfileMenu(false);
     // Reset initial load flag to show loader when switching profiles
