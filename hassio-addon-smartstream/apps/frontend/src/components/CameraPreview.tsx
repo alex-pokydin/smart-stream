@@ -19,6 +19,7 @@ export default function CameraPreview({
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [isPaused, setIsPaused] = useState(false);
+  const isInitialLoadRef = useRef(true);
   const imgRef = useRef<HTMLImageElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -27,7 +28,10 @@ export default function CameraPreview({
   const loadSnapshot = () => {
     if (isPaused) return;
     
-    setLoading(true);
+    // Only show loader on initial load
+    if (isInitialLoadRef.current) {
+      setLoading(true);
+    }
     setError(null);
 
     // Add timestamp to prevent caching
@@ -40,12 +44,14 @@ export default function CameraPreview({
 
   const handleImageLoad = () => {
     setLoading(false);
+    isInitialLoadRef.current = false;
     setError(null);
     setLastUpdate(new Date());
   };
 
   const handleImageError = () => {
     setLoading(false);
+    isInitialLoadRef.current = false;
     setError('Failed to load camera snapshot');
   };
 
