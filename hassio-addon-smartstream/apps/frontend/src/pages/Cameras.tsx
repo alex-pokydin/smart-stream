@@ -12,7 +12,9 @@ import {
   X,
   Youtube,
   Radio,
-  Activity
+  Activity,
+  Video,
+  VideoOff
 } from 'lucide-react';
 import { cameraService, streamService } from '@/services/api';
 import { 
@@ -22,6 +24,7 @@ import {
   UpdateCameraRequest 
 } from '@smart-stream/shared';
 import toast from 'react-hot-toast';
+import CameraPreview from '@/components/CameraPreview';
 
 interface AddCameraFormData {
   hostname: string;
@@ -47,6 +50,7 @@ export default function Cameras() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCamera, setEditingCamera] = useState<string | null>(null);
   const [discoveryDuration, setDiscoveryDuration] = useState<number | null>(null);
+  const [previewingCameras, setPreviewingCameras] = useState<Set<string>>(new Set());
 
   const [addForm, setAddForm] = useState<AddCameraFormData>({
     hostname: '',
@@ -301,6 +305,18 @@ export default function Cameras() {
       default:
         return null;
     }
+  };
+
+  const togglePreview = (hostname: string) => {
+    setPreviewingCameras(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(hostname)) {
+        newSet.delete(hostname);
+      } else {
+        newSet.add(hostname);
+      }
+      return newSet;
+    });
   };
 
   if (loading) {
@@ -716,106 +732,132 @@ export default function Cameras() {
                     </form>
                   ) : (
                     // Display Mode
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <Camera className="h-8 w-8 text-gray-400" />
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-medium text-gray-900">{camera.hostname}</h4>
-                            {camera.autostart && (
-                              <span className="badge badge-primary">Autostart</span>
-                            )}
-                            {camera.defaultPlatform && (
-                              <div className="flex items-center space-x-1">
-                                {getPlatformIcon(camera.defaultPlatform)}
-                                <span className="text-xs text-gray-500 capitalize">{camera.defaultPlatform}</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {camera.username}@{camera.hostname}:{camera.port}
-                          </div>
-                          <div className="flex items-center space-x-2 mt-1">
-                            {camera.youtubeStreamKey && (
-                              <span className="inline-flex items-center space-x-1 text-xs text-red-600">
-                                <Youtube className="h-3 w-3" />
-                                <span>YouTube</span>
-                              </span>
-                            )}
-                            {camera.twitchStreamKey && (
-                              <span className="inline-flex items-center space-x-1 text-xs text-purple-600">
-                                <Radio className="h-3 w-3" />
-                                <span>Twitch</span>
-                              </span>
-                            )}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-4">
+                          <Camera className="h-8 w-8 text-gray-400" />
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <h4 className="font-medium text-gray-900">{camera.hostname}</h4>
+                              {camera.autostart && (
+                                <span className="badge badge-primary">Autostart</span>
+                              )}
+                              {camera.defaultPlatform && (
+                                <div className="flex items-center space-x-1">
+                                  {getPlatformIcon(camera.defaultPlatform)}
+                                  <span className="text-xs text-gray-500 capitalize">{camera.defaultPlatform}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {camera.username}@{camera.hostname}:{camera.port}
+                            </div>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {camera.youtubeStreamKey && (
+                                <span className="inline-flex items-center space-x-1 text-xs text-red-600">
+                                  <Youtube className="h-3 w-3" />
+                                  <span>YouTube</span>
+                                </span>
+                              )}
+                              {camera.twitchStreamKey && (
+                                <span className="inline-flex items-center space-x-1 text-xs text-purple-600">
+                                  <Radio className="h-3 w-3" />
+                                  <span>Twitch</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        {/* Stream Action Buttons */}
-                        {camera.youtubeStreamKey && (
+                        
+                        <div className="flex items-center space-x-2">
+                          {/* Preview Toggle Button */}
                           <button
-                            onClick={() => startYouTubeStream(camera)}
-                            className="btn btn-ghost btn-sm text-red-600 hover:text-red-700"
-                            title="Start YouTube Stream"
+                            onClick={() => togglePreview(camera.hostname)}
+                            className={`btn btn-ghost btn-sm ${previewingCameras.has(camera.hostname) ? 'text-primary-600' : ''}`}
+                            title={previewingCameras.has(camera.hostname) ? 'Hide Preview' : 'Show Preview'}
                           >
-                            <Youtube className="h-4 w-4" />
+                            {previewingCameras.has(camera.hostname) ? (
+                              <VideoOff className="h-4 w-4" />
+                            ) : (
+                              <Video className="h-4 w-4" />
+                            )}
                           </button>
-                        )}
-                        
-                        {camera.twitchStreamKey && (
+                          
+                          {/* Stream Action Buttons */}
+                          {camera.youtubeStreamKey && (
+                            <button
+                              onClick={() => startYouTubeStream(camera)}
+                              className="btn btn-ghost btn-sm text-red-600 hover:text-red-700"
+                              title="Start YouTube Stream"
+                            >
+                              <Youtube className="h-4 w-4" />
+                            </button>
+                          )}
+                          
+                          {camera.twitchStreamKey && (
+                            <button
+                              onClick={() => startTwitchStream(camera)}
+                              className="btn btn-ghost btn-sm text-purple-600 hover:text-purple-700"
+                              title="Start Twitch Stream"
+                            >
+                              <Radio className="h-4 w-4" />
+                            </button>
+                          )}
+                          
+                          {/* Management Action Buttons */}
                           <button
-                            onClick={() => startTwitchStream(camera)}
-                            className="btn btn-ghost btn-sm text-purple-600 hover:text-purple-700"
-                            title="Start Twitch Stream"
+                            onClick={() => testCameraConnection(camera.hostname)}
+                            disabled={testingConnections.has(camera.hostname)}
+                            className="btn btn-ghost btn-sm"
+                            title="Test Connection"
                           >
-                            <Radio className="h-4 w-4" />
+                            {testingConnections.has(camera.hostname) ? (
+                              <div className="loading-spinner h-4 w-4" />
+                            ) : (
+                              <TestTube className="h-4 w-4" />
+                            )}
                           </button>
-                        )}
-                        
-                        {/* Management Action Buttons */}
-                        <button
-                          onClick={() => testCameraConnection(camera.hostname)}
-                          disabled={testingConnections.has(camera.hostname)}
-                          className="btn btn-ghost btn-sm"
-                          title="Test Connection"
-                        >
-                          {testingConnections.has(camera.hostname) ? (
-                            <div className="loading-spinner h-4 w-4" />
-                          ) : (
-                            <TestTube className="h-4 w-4" />
-                          )}
-                        </button>
-                        
-                        <button
-                          onClick={() => toggleAutostart(camera.hostname)}
-                          className="btn btn-ghost btn-sm"
-                          title="Toggle Autostart"
-                        >
-                          {camera.autostart ? (
-                            <Pause className="h-4 w-4" />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
-                        </button>
-                        
-                        <button
-                          onClick={() => startEdit(camera)}
-                          className="btn btn-ghost btn-sm"
-                          title="Edit Camera"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        
-                        <button
-                          onClick={() => deleteCamera(camera.hostname)}
-                          className="btn btn-ghost btn-sm text-error-600 hover:text-error-700"
-                          title="Delete Camera"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                          
+                          <button
+                            onClick={() => toggleAutostart(camera.hostname)}
+                            className="btn btn-ghost btn-sm"
+                            title="Toggle Autostart"
+                          >
+                            {camera.autostart ? (
+                              <Pause className="h-4 w-4" />
+                            ) : (
+                              <Play className="h-4 w-4" />
+                            )}
+                          </button>
+                          
+                          <button
+                            onClick={() => startEdit(camera)}
+                            className="btn btn-ghost btn-sm"
+                            title="Edit Camera"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          
+                          <button
+                            onClick={() => deleteCamera(camera.hostname)}
+                            className="btn btn-ghost btn-sm text-error-600 hover:text-error-700"
+                            title="Delete Camera"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Camera Preview */}
+                      {previewingCameras.has(camera.hostname) && (
+                        <div className="mt-4">
+                          <CameraPreview 
+                            hostname={camera.hostname}
+                            refreshInterval={1000}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

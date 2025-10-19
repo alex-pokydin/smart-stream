@@ -1,7 +1,7 @@
 ---
 name: "Smart Stream"
 description: "Advanced IP camera streaming to multiple platforms (YouTube, Twitch, Custom RTMP) with ONVIF support"
-version: 1.0.30
+version: 1.0.31
 slug: smart_stream
 init: false
 arch:

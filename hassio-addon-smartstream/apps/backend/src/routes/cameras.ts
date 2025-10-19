@@ -321,5 +321,67 @@ export function createCameraRouter(
     }
   );
 
+  // GET /cameras/:hostname/snapshot - Get camera snapshot
+  router.get(
+    '/:hostname/snapshot',
+    validateParams(hostnameParamSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { hostname } = req.params;
+        if (!hostname) {
+          throw new ValidationError('Hostname parameter is required', 'hostname', hostname);
+        }
+        
+        const camera = await database.getCamera(hostname);
+        if (!camera) {
+          throw new CameraNotFoundError(hostname);
+        }
+
+        log('Getting snapshot for camera: %s', hostname);
+
+        // Get ONVIF camera instance
+        const onvifCamera = await onvif.getCamera({
+          hostname: camera.hostname,
+          port: typeof camera.port === 'string' ? parseInt(camera.port) : camera.port,
+          username: camera.username,
+          password: camera.password
+        });
+
+        // Get snapshot URI
+        const snapshotInfo = await onvif.getCameraSnapshot(onvifCamera);
+        log('Snapshot URI for %s: %s', hostname, snapshotInfo.uri.replace(/\/\/.*@/, '//[CREDENTIALS]@'));
+
+        // Fetch the snapshot image and proxy it
+        const axios = require('axios');
+        const imageResponse = await axios.get(snapshotInfo.uri, {
+          responseType: 'arraybuffer',
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'SmartStream/1.0'
+          }
+        });
+
+        // Set appropriate headers
+        res.set({
+          'Content-Type': imageResponse.headers['content-type'] || 'image/jpeg',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        });
+
+        // Send the image
+        res.send(imageResponse.data);
+      } catch (error) {
+        log('Error getting snapshot for camera %s:', req.params.hostname, error);
+        // Send a placeholder or error image
+        res.status(500).json({
+          success: false,
+          error: 'SNAPSHOT_FAILED',
+          message: `Failed to get snapshot: ${(error as Error).message}`
+        });
+      }
+    }
+  );
+
   return router;
 }

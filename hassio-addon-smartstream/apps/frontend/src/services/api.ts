@@ -87,6 +87,11 @@ export const cameraService = {
     if (!response.data.data) throw new Error('Toggle failed');
     return response.data.data;
   },
+
+  getSnapshotUrl(hostname: string): string {
+    const baseURL = getApiBaseURL();
+    return `${baseURL}/cameras/${hostname}/snapshot`;
+  },
 };
 
 // Stream API
