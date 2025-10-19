@@ -88,9 +88,38 @@ export const cameraService = {
     return response.data.data;
   },
 
-  getSnapshotUrl(hostname: string): string {
+  async getProfiles(hostname: string): Promise<{
+    hostname: string;
+    count: number;
+    profiles: Array<{
+      token: string;
+      name: string;
+      resolution: { width: number; height: number };
+      encoding?: string;
+      framerate?: number;
+      bitrate?: number;
+    }>;
+  }> {
+    const response = await api.get<ApiResponse<{
+      hostname: string;
+      count: number;
+      profiles: Array<{
+        token: string;
+        name: string;
+        resolution: { width: number; height: number };
+        encoding?: string;
+        framerate?: number;
+        bitrate?: number;
+      }>;
+    }>>(`/cameras/${hostname}/profiles`);
+    if (!response.data.data) throw new Error('Failed to get camera profiles');
+    return response.data.data;
+  },
+
+  getSnapshotUrl(hostname: string, profileToken?: string): string {
     const baseURL = getApiBaseURL();
-    return `${baseURL}/cameras/${hostname}/snapshot`;
+    const url = `${baseURL}/cameras/${hostname}/snapshot`;
+    return profileToken ? `${url}?profile=${profileToken}` : url;
   },
 };
 

@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Video, RefreshCw, AlertCircle, Maximize2 } from 'lucide-react';
+import { Video, RefreshCw, AlertCircle, Maximize2, Settings } from 'lucide-react';
 import { cameraService } from '@/services/api';
+
+interface CameraProfile {
+  token: string;
+  name: string;
+  resolution: { width: number; height: number };
+  encoding?: string;
+  framerate?: number;
+  bitrate?: number;
+}
 
 interface CameraPreviewProps {
   hostname: string;
@@ -19,11 +28,55 @@ export default function CameraPreview({
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [isPaused, setIsPaused] = useState(false);
+  const [profiles, setProfiles] = useState<CameraProfile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<string | undefined>(undefined);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const isInitialLoadRef = useRef(true);
   const imgRef = useRef<HTMLImageElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
-  const snapshotUrl = cameraService.getSnapshotUrl(hostname);
+  const snapshotUrl = cameraService.getSnapshotUrl(hostname, selectedProfile);
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    };
+
+    if (showProfileMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showProfileMenu]);
+
+  // Load available profiles
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      try {
+        const result = await cameraService.getProfiles(hostname);
+        setProfiles(result.profiles);
+        // Auto-select the highest resolution profile
+        if (result.profiles.length > 0) {
+          const highestRes = result.profiles.reduce((prev, curr) => 
+            (curr.resolution.width * curr.resolution.height) > (prev.resolution.width * prev.resolution.height) 
+              ? curr 
+              : prev
+          );
+          setSelectedProfile(highestRes.token);
+        }
+      } catch (err) {
+        console.error('Failed to load camera profiles:', err);
+        // Continue without profile selection if it fails
+      }
+    };
+    
+    fetchProfiles();
+  }, [hostname]);
 
   const loadSnapshot = () => {
     if (isPaused) return;
@@ -35,7 +88,8 @@ export default function CameraPreview({
     setError(null);
 
     // Add timestamp to prevent caching
-    const url = `${snapshotUrl}?t=${Date.now()}`;
+    const separator = snapshotUrl.includes('?') ? '&' : '?';
+    const url = `${snapshotUrl}${separator}t=${Date.now()}`;
     
     if (imgRef.current) {
       imgRef.current.src = url;
@@ -67,6 +121,13 @@ export default function CameraPreview({
     }
   };
 
+  const handleProfileChange = (token: string) => {
+    setSelectedProfile(token);
+    setShowProfileMenu(false);
+    // Reset initial load flag to show loader when switching profiles
+    isInitialLoadRef.current = true;
+  };
+
   useEffect(() => {
     // Load initial snapshot
     loadSnapshot();
@@ -82,7 +143,7 @@ export default function CameraPreview({
         clearInterval(intervalRef.current);
       }
     };
-  }, [hostname, refreshInterval, isPaused]);
+  }, [hostname, refreshInterval, isPaused, selectedProfile]);
 
   return (
     <div className={`relative bg-gray-900 rounded-lg overflow-hidden ${className}`}>
@@ -142,6 +203,38 @@ export default function CameraPreview({
             </div>
             
             <div className="flex items-center space-x-2">
+              {profiles.length > 1 && (
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    onClick={() => setShowProfileMenu(!showProfileMenu)}
+                    className="p-1 hover:bg-white hover:bg-opacity-20 rounded transition-colors"
+                    title="Change Resolution"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                  
+                  {showProfileMenu && (
+                    <div className="absolute bottom-full right-0 mb-2 bg-gray-800 rounded shadow-lg py-1 min-w-[200px] z-10">
+                      {profiles.map((profile) => (
+                        <button
+                          key={profile.token}
+                          onClick={() => handleProfileChange(profile.token)}
+                          className={`w-full text-left px-3 py-2 hover:bg-gray-700 transition-colors ${
+                            selectedProfile === profile.token ? 'bg-gray-700 text-blue-400' : ''
+                          }`}
+                        >
+                          <div className="font-medium">{profile.name}</div>
+                          <div className="text-xs opacity-75">
+                            {profile.resolution.width}x{profile.resolution.height}
+                            {profile.framerate && ` @ ${profile.framerate}fps`}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              
               <button
                 onClick={togglePause}
                 className="p-1 hover:bg-white hover:bg-opacity-20 rounded transition-colors"

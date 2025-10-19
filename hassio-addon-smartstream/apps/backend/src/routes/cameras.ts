@@ -321,6 +321,69 @@ export function createCameraRouter(
     }
   );
 
+  // GET /cameras/:hostname/profiles - Get camera media profiles
+  router.get(
+    '/:hostname/profiles',
+    validateParams(hostnameParamSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { hostname } = req.params;
+        if (!hostname) {
+          throw new ValidationError('Hostname parameter is required', 'hostname', hostname);
+        }
+        
+        const camera = await database.getCamera(hostname);
+        if (!camera) {
+          throw new CameraNotFoundError(hostname);
+        }
+
+        log('Getting profiles for camera: %s', hostname);
+
+        // Get ONVIF camera instance
+        const onvifCamera = await onvif.getCamera({
+          hostname: camera.hostname,
+          port: typeof camera.port === 'string' ? parseInt(camera.port) : camera.port,
+          username: camera.username,
+          password: camera.password
+        });
+
+        // Get camera profiles
+        const profiles = await onvif.getCameraProfiles(onvifCamera);
+        
+        // Format profile information
+        const formattedProfiles = profiles.map(profile => ({
+          token: profile.token,
+          name: profile.name,
+          resolution: {
+            width: profile.videoEncoderConfiguration?.resolution?.width || 0,
+            height: profile.videoEncoderConfiguration?.resolution?.height || 0
+          },
+          encoding: profile.videoEncoderConfiguration?.encoding,
+          framerate: profile.videoEncoderConfiguration?.rateControl?.frameRateLimit,
+          bitrate: profile.videoEncoderConfiguration?.rateControl?.bitrateLimit
+        }));
+
+        const response: ApiResponse = {
+          success: true,
+          data: {
+            hostname,
+            profiles: formattedProfiles,
+            count: formattedProfiles.length
+          }
+        };
+
+        res.json(response);
+      } catch (error) {
+        log('Error getting profiles for camera %s:', req.params.hostname, error);
+        res.status(500).json({
+          success: false,
+          error: 'PROFILES_FAILED',
+          message: `Failed to get camera profiles: ${(error as Error).message}`
+        });
+      }
+    }
+  );
+
   // GET /cameras/:hostname/snapshot - Get camera snapshot
   router.get(
     '/:hostname/snapshot',
@@ -347,8 +410,11 @@ export function createCameraRouter(
           password: camera.password
         });
 
+        // Get profile token from query parameter (optional)
+        const profileToken = req.query.profile as string | undefined;
+
         // Get snapshot URI
-        const snapshotInfo = await onvif.getCameraSnapshot(onvifCamera);
+        const snapshotInfo = await onvif.getCameraSnapshot(onvifCamera, profileToken);
         log('Snapshot URI for %s: %s', hostname, snapshotInfo.uri.replace(/\/\/.*@/, '//[CREDENTIALS]@'));
 
         // Fetch the snapshot image and proxy it

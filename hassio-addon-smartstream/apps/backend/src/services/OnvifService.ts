@@ -162,14 +162,54 @@ export class OnvifService {
     }
   }
 
-  public async getCameraSnapshot(camera: OnvifCamera): Promise<{ uri: string }> {
+  public async getCameraProfiles(camera: OnvifCamera): Promise<any[]> {
     try {
-      log('Getting snapshot URI from camera');
+      log('Getting media profiles from camera');
+      
+      if (typeof (camera as any).getProfiles === 'function') {
+        const profiles = await new Promise<any[]>((resolve, reject) => {
+          (camera as any).getProfiles((err: any, profiles: any[]) => {
+            if (err) {
+              log('getProfiles callback error:', err);
+              reject(err);
+            } else {
+              log('getProfiles callback result - found %d profiles', profiles?.length || 0);
+              resolve(profiles || []);
+            }
+          });
+        });
+        
+        // Log profile details
+        profiles.forEach((profile, idx) => {
+          const resolution = profile?.videoEncoderConfiguration?.resolution;
+          log('Profile %d: token=%s, name=%s, resolution=%dx%d', 
+            idx, 
+            profile?.token || 'unknown',
+            profile?.name || 'unknown',
+            resolution?.width || 0,
+            resolution?.height || 0
+          );
+        });
+        
+        return profiles;
+      }
+      
+      throw new Error('No getProfiles method available on camera object');
+    } catch (error) {
+      log('Error getting camera profiles:', error);
+      throw error;
+    }
+  }
+
+  public async getCameraSnapshot(camera: OnvifCamera, profileToken?: string): Promise<{ uri: string }> {
+    try {
+      log('Getting snapshot URI from camera%s', profileToken ? ` for profile: ${profileToken}` : ' (default profile)');
       
       // Try getSnapshotUri with callback - this is the real ONVIF method
       if (typeof (camera as any).getSnapshotUri === 'function') {
+        const options = profileToken ? { profileToken } : {};
         const result = await new Promise<any>((resolve, reject) => {
-          (camera as any).getSnapshotUri({}, (err: any, result: any) => {
+          (camera as any).getSnapshotUri(options, (err: any, result: any) => {
             if (err) {
               log('getSnapshotUri callback error:', err);
               reject(err);
